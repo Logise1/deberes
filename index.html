@@ -126,7 +126,9 @@
             <div class="modal-content bottom-sheet">
                 <h2>🎯 ¡Ayuda a la comunidad!</h2>
                 <p style="color: var(--text-muted); margin-bottom: 1rem;">
-                    Antes de ver esta página, ¿podrías contribuir añadiendo la página <strong id="contribution-page-number" style="color: var(--primary-color);">0</strong> de <strong id="contribution-subject" style="color: var(--primary-color);">esta asignatura</strong>?
+                    Antes de ver esta página, ¿podrías contribuir añadiendo la página <strong
+                        id="contribution-page-number" style="color: var(--primary-color);">0</strong> de <strong
+                        id="contribution-subject" style="color: var(--primary-color);">esta asignatura</strong>?
                 </p>
                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
                     Esta página aún no está en el sistema y ayudaría a otros estudiantes.
@@ -145,6 +147,19 @@
         <!-- Fullscreen Overlay: Camera -->
         <div id="overlay-camera" class="fullscreen-overlay hidden">
             <video id="camera-feed" autoplay playsinline></video>
+
+            <!-- Page Number Overlay (only shown during contribution) -->
+            <div id="camera-page-overlay" class="hidden"
+                style="position: absolute; top: 80px; left: 50%; transform: translateX(-50%); z-index: 1001; background: rgba(0, 0, 0, 0.8); padding: 1rem 2rem; border-radius: 16px; backdrop-filter: blur(10px); border: 2px solid rgba(255, 255, 255, 0.2);">
+                <div style="text-align: center;">
+                    <div
+                        style="color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">
+                        Fotografiando página</div>
+                    <div id="camera-page-number"
+                        style="color: white; font-size: 3.5rem; font-weight: 800; line-height: 1;">42</div>
+                </div>
+            </div>
+
             <div class="camera-ui">
                 <div class="camera-header">
                     <span class="camera-instruction">Pon la página en la cámara</span>

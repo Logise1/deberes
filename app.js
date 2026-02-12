@@ -70,6 +70,8 @@ const contributionPageNumber = document.getElementById('contribution-page-number
 const contributionSubject = document.getElementById('contribution-subject');
 const btnContributeYes = document.getElementById('btn-contribute-yes');
 const btnContributeNo = document.getElementById('btn-contribute-no');
+const cameraPageOverlay = document.getElementById('camera-page-overlay');
+const cameraPageNumber = document.getElementById('camera-page-number');
 
 const MISTRAL_API_KEY = "evxly62Xv91b752fbnHA2I3HD988C5RT";
 const GREENHOST_API_URL = "https://greenbase.arielcapdevila.com";
@@ -305,12 +307,12 @@ async function handlePageClick(pageData) {
     const snapshot = await db.collection('pages')
         .where('subject', '==', pageData.subject)
         .get();
-    
+
     state.allPages = snapshot.docs.map(doc => parseInt(doc.data().page));
-    
+
     // Find a random missing page nearby
     const missingPage = findRandomMissingPage(pageData.subject, state.allPages);
-    
+
     if (missingPage !== null) {
         // Show contribution request
         state.pendingPageView = pageData;
@@ -327,9 +329,9 @@ async function handlePageClick(pageData) {
 // Find a random missing page (preferably +1 or -1 from existing pages)
 function findRandomMissingPage(subject, existingPages) {
     if (existingPages.length === 0) return 1; // If no pages, suggest page 1
-    
+
     const candidates = new Set();
-    
+
     // Look for gaps around existing pages
     existingPages.forEach(page => {
         if (!existingPages.includes(page - 1)) {
@@ -339,14 +341,14 @@ function findRandomMissingPage(subject, existingPages) {
             candidates.add(page + 1);
         }
     });
-    
+
     // Remove pages <= 0
     const validCandidates = Array.from(candidates).filter(p => p > 0);
-    
+
     if (validCandidates.length === 0) {
         return null; // No missing pages nearby
     }
-    
+
     // Return a random candidate
     return validCandidates[Math.floor(Math.random() * validCandidates.length)];
 }
@@ -354,11 +356,11 @@ function findRandomMissingPage(subject, existingPages) {
 // Handle "Yes" button on contribution modal
 function handleContributeYes() {
     hideModal(modalContribution);
-    
+
     // Set up for contribution
     selectSubject.value = state.pendingPageView.subject;
     inputPage.value = state.contributionPage;
-    
+
     // Start camera flow for contribution
     startCameraFlowForContribution(state.pendingPageView.subject, state.contributionPage);
 }
@@ -366,7 +368,7 @@ function handleContributeYes() {
 // Handle "No" button on contribution modal
 function handleContributeNo() {
     hideModal(modalContribution);
-    
+
     // Show a countdown overlay
     showCountdownAndProceed();
 }
@@ -375,15 +377,15 @@ function handleContributeNo() {
 function showCountdownAndProceed() {
     overlayProcessing.classList.remove('hidden');
     progressBar.style.width = '0%';
-    
+
     let secondsLeft = 10;
     processingText.textContent = `⏱️ Esperando ${secondsLeft} segundos...`;
-    
+
     const interval = setInterval(() => {
         secondsLeft--;
         processingText.textContent = `⏱️ Esperando ${secondsLeft} segundos...`;
         progressBar.style.width = `${(10 - secondsLeft) * 10}%`;
-        
+
         if (secondsLeft <= 0) {
             clearInterval(interval);
             overlayProcessing.classList.add('hidden');
@@ -397,6 +399,10 @@ function showCountdownAndProceed() {
 function startCameraFlowForContribution(subject, page) {
     state.pendingUpload = { subject, page, isContribution: true };
     overlayCamera.classList.remove('hidden');
+
+    // Show page number overlay
+    cameraPageNumber.textContent = page;
+    cameraPageOverlay.classList.remove('hidden');
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({
@@ -544,6 +550,9 @@ function startCameraFlow(subject, page) {
     state.pendingUpload = { subject, page };
     overlayCamera.classList.remove('hidden');
 
+    // Hide page number overlay (only show for contributions)
+    cameraPageOverlay.classList.add('hidden');
+
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({
             video: { facingMode: { exact: "environment" }, width: { ideal: 4096 }, height: { ideal: 2160 } }
@@ -570,6 +579,9 @@ function stopCamera() {
         state.cameraStream = null;
     }
     overlayCamera.classList.add('hidden');
+
+    // Hide page number overlay
+    cameraPageOverlay.classList.add('hidden');
 }
 
 async function handleCapture() {
@@ -626,7 +638,7 @@ async function processImage(imageBlob, isContribution = false) {
             await sendToWorker(imageBlob);
             // Navigate immediately, worker handles everything in background
             overlayProcessing.classList.add('hidden');
-            
+
             if (isContribution) {
                 // After contribution, show the original page they wanted
                 if (state.pendingPageView) {
@@ -707,7 +719,7 @@ async function processImage(imageBlob, isContribution = false) {
 
         setTimeout(() => {
             overlayProcessing.classList.add('hidden');
-            
+
             if (isContribution && state.pendingPageView) {
                 // After contribution, show the original page they wanted
                 navigateTo('view-result', state.pendingPageView);

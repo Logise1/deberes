@@ -1,5 +1,5 @@
 // Cloudflare Worker for AI Homework Helper
-// This worker processes homework images: uploads, extracts text, solves exercises, and saves to Firebase
+// This worker manages a queue system: uploads are queued, and processing happens via /work endpoint
 
 const MISTRAL_API_KEY = "evxly62Xv91b752fbnHA2I3HD988C5RT";
 const GREENHOST_API_URL = "https://greenbase.arielcapdevila.com";
@@ -33,7 +33,7 @@ export default {
             });
         }
 
-        // Process image endpoint
+        // Add to queue endpoint
         if (url.pathname === '/process' && request.method === 'POST') {
             try {
                 const formData = await request.formData();
@@ -49,13 +49,24 @@ export default {
                     });
                 }
 
-                // Process in background (no await - fire and forget)
-                processImageAsync(imageBlob, subject, page, userName);
+                // Step 1: Upload image to GreenHost
+                const imageUrl = await uploadToGreenHost(imageBlob);
+
+                // Step 2: Save to queue in Firebase
+                const queueItem = await addToQueue({
+                    subject: subject,
+                    page: parseInt(page),
+                    imageUrl: imageUrl,
+                    providedBy: userName,
+                    queuedAt: new Date().toISOString(),
+                    status: 'pending'
+                });
 
                 // Return immediately
                 return new Response(JSON.stringify({
-                    status: 'processing',
-                    message: 'Image submitted for processing'
+                    status: 'queued',
+                    message: 'Image added to processing queue',
+                    queueId: queueItem.name
                 }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
@@ -68,19 +79,134 @@ export default {
             }
         }
 
+        // Process one item from queue endpoint
+        if (url.pathname === '/work' && request.method === 'GET') {
+            try {
+                // Get a random item from queue
+                const queueItem = await getRandomQueueItem();
+
+                if (!queueItem) {
+                    return new Response(JSON.stringify({
+                        status: 'idle',
+                        message: 'No items in queue'
+                    }), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+
+                // Process the item
+                const result = await processQueueItem(queueItem);
+
+                // Delete from queue
+                await deleteFromQueue(queueItem.id);
+
+                return new Response(JSON.stringify({
+                    status: 'completed',
+                    message: 'Item processed and removed from queue',
+                    processed: {
+                        subject: queueItem.data.subject,
+                        page: queueItem.data.page,
+                        providedBy: queueItem.data.providedBy
+                    }
+                }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+
+            } catch (error) {
+                return new Response(JSON.stringify({
+                    status: 'error',
+                    error: error.message
+                }), {
+                    status: 500,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+        }
+
         return new Response('Not Found', { status: 404, headers: corsHeaders });
     }
 };
 
-async function processImageAsync(imageBlob, subject, page, userName) {
+// Add item to queue in Firebase
+async function addToQueue(queueData) {
+    const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents/queue?key=${FIREBASE_CONFIG.apiKey}`;
+
+    const firestoreDoc = {
+        fields: {
+            subject: { stringValue: queueData.subject },
+            page: { integerValue: queueData.page.toString() },
+            imageUrl: { stringValue: queueData.imageUrl },
+            providedBy: { stringValue: queueData.providedBy },
+            queuedAt: { timestampValue: queueData.queuedAt },
+            status: { stringValue: queueData.status }
+        }
+    };
+
+    const res = await fetch(firestoreUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(firestoreDoc)
+    });
+
+    if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`Failed to add to queue: ${error}`);
+    }
+
+    return await res.json();
+}
+
+// Get all queue items
+async function getAllQueueItems() {
+    const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents/queue?key=${FIREBASE_CONFIG.apiKey}`;
+
+    const res = await fetch(firestoreUrl);
+
+    if (!res.ok) {
+        throw new Error('Failed to fetch queue');
+    }
+
+    const data = await res.json();
+
+    if (!data.documents || data.documents.length === 0) {
+        return [];
+    }
+
+    return data.documents.map(doc => ({
+        id: doc.name,
+        data: {
+            subject: doc.fields.subject?.stringValue,
+            page: parseInt(doc.fields.page?.integerValue),
+            imageUrl: doc.fields.imageUrl?.stringValue,
+            providedBy: doc.fields.providedBy?.stringValue,
+            queuedAt: doc.fields.queuedAt?.timestampValue,
+            status: doc.fields.status?.stringValue
+        }
+    }));
+}
+
+// Get a random item from queue
+async function getRandomQueueItem() {
+    const items = await getAllQueueItems();
+
+    if (items.length === 0) {
+        return null;
+    }
+
+    // Return random item
+    const randomIndex = Math.floor(Math.random() * items.length);
+    return items[randomIndex];
+}
+
+// Process a queue item
+async function processQueueItem(queueItem) {
+    const data = queueItem.data;
+
     try {
-        // Step 1: Upload to GreenHost
-        const imageUrl = await uploadToGreenHost(imageBlob);
+        // Step 1: Extract text with Pixtral
+        const transcription = await extractTextWithPixtral(data.imageUrl);
 
-        // Step 2: Extract text with Pixtral
-        const transcription = await extractTextWithPixtral(imageUrl);
-
-        // Step 3: Solve with Mistral Large
+        // Step 2: Solve with Mistral Large
         const aiJson = await solveWithMistral(transcription);
 
         let aiData;
@@ -91,20 +217,38 @@ async function processImageAsync(imageBlob, subject, page, userName) {
             aiData = { exercises: [] };
         }
 
-        // Step 4: Save to Firebase
+        // Step 3: Save to pages collection in Firebase
         await saveToFirebase({
-            subject: subject,
-            page: parseInt(page),
-            imageUrl: imageUrl,
+            subject: data.subject,
+            page: data.page,
+            imageUrl: data.imageUrl,
             solution: aiData.exercises || aiData,
-            providedBy: userName,
+            providedBy: data.providedBy,
             timestamp: new Date().toISOString()
         });
 
-        console.log(`Successfully processed page ${page} for ${subject}`);
+        console.log(`Successfully processed page ${data.page} for ${data.subject}`);
+        return { success: true };
     } catch (error) {
         console.error('Processing error:', error);
+        throw error;
     }
+}
+
+// Delete item from queue
+async function deleteFromQueue(documentPath) {
+    const deleteUrl = `https://firestore.googleapis.com/v1/${documentPath}?key=${FIREBASE_CONFIG.apiKey}`;
+
+    const res = await fetch(deleteUrl, {
+        method: 'DELETE'
+    });
+
+    if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`Failed to delete from queue: ${error}`);
+    }
+
+    return true;
 }
 
 async function uploadToGreenHost(blob) {

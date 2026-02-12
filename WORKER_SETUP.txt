@@ -1,11 +1,211 @@
-// INSTRUCCIONES DE CONFIGURACIÓN:
-// 1. Despliega worker.js en Cloudflare Workers
-// 2. Copia la URL del worker y pégala en la constante WORKER_URL abajo
-// 3. La app automáticamente usará el worker si está disponible
+# Worker Queue System - Documentación
 
-const WORKER_URL = "https://deberes.logise1123.workers.dev"; // ← PEGA AQUÍ TU URL DEL WORKER (ej: "https://tu-worker.workers.dev")
+## 📋 Cómo Funciona
 
-// Funcionalidad del worker:
-// - Si WORKER_URL está vacío o el worker no responde en 2s → procesa localmente
-// - Si el worker responde OK → envía la foto al worker y continúa sin esperar
-// - El worker procesa todo en background (upload, IA, Firebase)
+El worker ahora usa un sistema de **cola (queue)** para procesar las imágenes de manera asíncrona:
+
+### 1. Cuando subes una foto (POST `/process`)
+- ✅ Sube la imagen a GreenHost
+- ✅ Guarda la tarea en Firebase en la colección `queue`
+- ✅ Responde inmediatamente al usuario
+- ❌ NO procesa la imagen todavía
+
+### 2. Procesamiento manual (GET `/work`)
+- 🎲 Selecciona una imagen **aleatoria** de la cola
+- 🤖 La procesa con IA (Pixtral + Mistral)
+- 💾 Guarda el resultado en la colección `pages`
+- 🗑️ Borra el item de la cola
+
+---
+
+## 🚀 Uso
+
+### Endpoint 1: Subir imagen a la cola
+```bash
+POST https://deberes.logise1123.workers.dev/process
+Content-Type: multipart/form-data
+
+Campos:
+- image: archivo de imagen
+- subject: nombre de la asignatura
+- page: número de página
+- userName: nombre del usuario
+```
+
+**Respuesta:**
+```json
+{
+  "status": "queued",
+  "message": "Image added to processing queue",
+  "queueId": "projects/.../queue/abc123"
+}
+```
+
+### Endpoint 2: Procesar una imagen de la cola
+```bash
+GET https://deberes.logise1123.workers.dev/work
+```
+
+**Respuesta (si hay items en cola):**
+```json
+{
+  "status": "completed",
+  "message": "Item processed and removed from queue",
+  "processed": {
+    "subject": "Matemáticas",
+    "page": 42,
+    "providedBy": "Juan"
+  }
+}
+```
+
+**Respuesta (si la cola está vacía):**
+```json
+{
+  "status": "idle",
+  "message": "No items in queue"
+}
+```
+
+---
+
+## ⏰ Automatización: Procesar cada 10 minutos
+
+Tienes varias opciones para automatizar las peticiones cada 10 minutos:
+
+### Opción 1: Cron-job.org (Recomendado)
+1. Ve a https://cron-job.org/
+2. Regístrate gratis
+3. Crea un nuevo cron job:
+   - URL: `https://deberes.logise1123.workers.dev/work`
+   - Método: GET
+   - Frecuencia: Cada 10 minutos (*/10 * * * *)
+
+### Opción 2: GitHub Actions (Gratis)
+Crea `.github/workflows/process-queue.yml` en un repositorio:
+```yaml
+name: Process Queue
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # Cada 10 minutos
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process one item
+        run: curl -X GET https://deberes.logise1123.workers.dev/work
+```
+
+### Opción 3: EasyCron
+1. Ve a https://www.easycron.com/
+2. Regístrate (plan gratuito disponible)
+3. Crea un cron job para hacer GET cada 10 minutos
+
+### Opción 4: Cloudflare Workers Cron (MEJOR)
+Si usas Cloudflare Workers, puedes añadir un cron trigger directamente:
+
+En `wrangler.toml`:
+```toml
+[triggers]
+crons = ["*/10 * * * *"]
+```
+
+Y modificar el worker para que ejecute automáticamente:
+```javascript
+export default {
+  async scheduled(event, env, ctx) {
+    // Llamar a la lógica de /work automáticamente
+    await processOneFromQueue();
+  }
+}
+```
+
+### Opción 5: Script local (Windows)
+Guarda esto como `process_queue.bat`:
+```batch
+@echo off
+:loop
+curl -X GET https://deberes.logise1123.workers.dev/work
+timeout /t 600 /nobreak
+goto loop
+```
+
+Ejecuta el script y lo dejará corriendo cada 10 minutos (600 segundos).
+
+---
+
+## 📊 Monitoreo
+
+### Ver cuántos items hay en la cola
+Puedes ver directamente en Firebase Console:
+- Colección: `queue`
+- Cada documento es una tarea pendiente
+
+### Health Check
+```bash
+GET https://deberes.logise1123.workers.dev/health
+```
+
+---
+
+## 🔄 Flujo Completo
+
+```
+Usuario toma foto
+    ↓
+App.js llama POST /process
+    ↓
+Worker guarda en cola (queue)
+    ↓
+[10 minutos después]
+    ↓
+Cron job llama GET /work
+    ↓
+Worker procesa imagen aleatoria
+    ↓
+Resultado guardado en pages
+    ↓
+Item borrado de queue
+    ↓
+Usuario ve la solución en la app
+```
+
+---
+
+## 🎯 Ventajas de este sistema
+
+✅ **Instantáneo**: Usuario no espera mientras se procesa
+✅ **Distribuido**: Procesa las imágenes gradualmente
+✅ **Resiliente**: Si falla una, las demás siguen en cola
+✅ **Controlado**: Puedes ajustar la frecuencia de procesamiento
+✅ **Sin límites**: No hay timeout de 30 segundos del worker
+
+---
+
+## 🛠️ Estructura Firebase
+
+### Colección `queue` (cola de trabajo)
+```json
+{
+  "subject": "Matemáticas",
+  "page": 42,
+  "imageUrl": "https://greenbase.../file/abc123",
+  "providedBy": "Juan",
+  "queuedAt": "2026-02-12T22:00:00Z",
+  "status": "pending"
+}
+```
+
+### Colección `pages` (páginas procesadas)
+```json
+{
+  "subject": "Matemáticas",
+  "page": 42,
+  "imageUrl": "https://greenbase.../file/abc123",
+  "solution": [{"exercise": "1", "question": "...", "solution": "..."}],
+  "providedBy": "Juan",
+  "timestamp": "2026-02-12T22:10:00Z"
+}
+```
