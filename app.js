@@ -293,6 +293,11 @@ function renderResult(pageData) {
         } else {
             solution = pageData.solution;
         }
+
+        // Normalize to fix field name variations (questions→question, etc.)
+        if (solution && solution.exercises) {
+            solution = normalizeExerciseData(solution);
+        }
     } catch (e) {
         console.error("JSON Parse Error", e);
         resultContent.innerHTML = `<div class="exercise-card"><p>Error al procesar la respuesta de la IA.</p></div>`;
@@ -451,6 +456,31 @@ async function handleCapture() {
 
 // --- Processing with 20s Timer ---
 
+// Normalize exercise data to fix common AI field naming issues
+function normalizeExerciseData(data) {
+    if (!data || typeof data !== 'object') return data;
+
+    // If it has exercises array, normalize it
+    if (Array.isArray(data.exercises)) {
+        data.exercises = data.exercises.map(item => {
+            const normalized = {};
+
+            // Handle exercise number (various names)
+            normalized.exercise = item.exercise || item.exercises || item.number || item.id || '';
+
+            // Handle question (various names)
+            normalized.question = item.question || item.questions || item.enunciado || item.prompt || '';
+
+            // Handle solution (various names)
+            normalized.solution = item.solution || item.solutions || item.answer || item.respuesta || '';
+
+            return normalized;
+        });
+    }
+
+    return data;
+}
+
 async function processImage(imageBlob) {
     try {
         // Step 1: Upload (0 -> 25%)
@@ -472,6 +502,7 @@ async function processImage(imageBlob) {
         let aiData;
         try {
             aiData = JSON.parse(aiJson);
+            aiData = normalizeExerciseData(aiData); // Fix field name variations
         } catch (e) {
             aiData = { exercises: [] };
         }
