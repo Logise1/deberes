@@ -581,25 +581,64 @@ async function extractTextWithPixtral(imageUrl) {
 }
 
 async function solveWithMistral(transcription) {
-    const prompt = `
-        Eres un profesor. Resuelve estos ejercicios escolares:
-        ---
-        ${transcription}
-        ---
-        Formato JSON:
-        {
-          "exercises": [
-            { "exercise": "1", "question": "...", "solution": "..." }
-          ]
-        }
-    `;
+    const prompt = `Eres un profesor experto. Resuelve TODOS los ejercicios de esta página de deberes.
+
+TEXTO DE LA PÁGINA:
+---
+${transcription}
+---
+
+INSTRUCCIONES IMPORTANTES:
+1. Identifica TODOS los ejercicios
+2. Resuelve cada ejercicio completamente
+3. Devuelve SOLAMENTE un objeto JSON válido
+4. NO incluyas ningún texto adicional, comentarios ni explicaciones fuera del JSON
+
+FORMATO JSON OBLIGATORIO (USA EXACTAMENTE ESTOS NOMBRES DE CAMPOS):
+{
+  "exercises": [
+    {
+      "exercise": "NÚMERO_DEL_EJERCICIO",
+      "question": "ENUNCIADO_DEL_EJERCICIO",
+      "solution": "SOLUCIÓN_COMPLETA"
+    }
+  ]
+}
+
+REGLAS ESTRICTAS:
+- El campo DEBE llamarse "exercise" (singular, no "exercises")
+- El campo DEBE llamarse "question" (singular, no "questions")
+- El campo DEBE llamarse "solution" (singular, no "solutions")
+- "exercise" es el número o identificador (ej: "1", "1.1", "2a")
+- "question" es el enunciado completo del ejercicio
+- "solution" es la respuesta o solución completa
+
+EJEMPLO VÁLIDO:
+{
+  "exercises": [
+    {
+      "exercise": "1",
+      "question": "Calcula 5 + 3",
+      "solution": "8"
+    },
+    {
+      "exercise": "2",
+      "question": "¿Cuál es la capital de Francia?",
+      "solution": "París"
+    }
+  ]
+}
+
+Ahora resuelve los ejercicios y devuelve SOLAMENTE el JSON con el formato exacto especificado arriba.`;
+
     const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${MISTRAL_API_KEY}` },
         body: JSON.stringify({
             model: "mistral-large-latest",
             messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" }
+            response_format: { type: "json_object" },
+            temperature: 0.3
         })
     });
     if (!res.ok) throw new Error("Mistral failed");
