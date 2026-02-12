@@ -261,6 +261,23 @@ function loadPages(subject) {
             item.onclick = () => navigateTo('view-result', data);
             pageListEl.appendChild(item);
         });
+
+        // Add footer with "Add page" prompt
+        const footer = document.createElement('div');
+        footer.style.cssText = 'text-align: center; padding: 2rem 1rem; color: var(--text-muted);';
+        footer.innerHTML = `
+            <p style="margin-bottom: 0.5rem; font-size: 0.95rem;">¿No está la página que buscas?</p>
+            <a href="#" id="add-page-link" style="color: var(--primary-color); font-weight: 600; text-decoration: none; font-size: 0.9rem;">
+                Añádela ahora →
+            </a>
+        `;
+        pageListEl.appendChild(footer);
+
+        // Add click handler to the link
+        document.getElementById('add-page-link').addEventListener('click', (e) => {
+            e.preventDefault();
+            fabAdd.click(); // Trigger the FAB click
+        });
     }, error => {
         console.error("Error watching pages: ", error);
         pageListEl.innerHTML = `<p style="color:var(--error)">Error al cargar páginas.</p>`;
@@ -435,37 +452,22 @@ async function handleCapture() {
 // --- Processing with 20s Timer ---
 
 async function processImage(imageBlob) {
-    const DURATION = 20000; // 20 seconds minimum
-    let currentProgress = 0;
-
     try {
-        // Smooth progress animation
-        const updateProgress = (target, message) => {
-            processingText.textContent = message;
-            const increment = (target - currentProgress) / 20;
-            const interval = setInterval(() => {
-                currentProgress += increment;
-                if (currentProgress >= target) {
-                    currentProgress = target;
-                    clearInterval(interval);
-                }
-                progressBar.style.width = `${Math.min(currentProgress, 100)}%`;
-            }, 50);
-        };
-
-        // Step 1: Upload
-        updateProgress(25, "📤 Subiendo imagen...");
+        // Step 1: Upload (0 -> 25%)
+        processingText.textContent = "📤 Subiendo imagen...";
+        progressBar.style.width = '0%';
         const imageUrl = await uploadToGreenHost(imageBlob);
-        await new Promise(r => setTimeout(r, 1000));
+        progressBar.style.width = '25%';
 
-        // Step 2: Text extraction
-        updateProgress(50, "👁️ Leyendo texto con IA...");
+        // Step 2: Text extraction (25% -> 50%)
+        processingText.textContent = "👁️ Leyendo texto con IA...";
         const transcription = await extractTextWithPixtral(imageUrl);
-        await new Promise(r => setTimeout(r, 1000));
+        progressBar.style.width = '50%';
 
-        // Step 3: Solving
-        updateProgress(85, "🧠 Resolviendo ejercicios...");
+        // Step 3: Solving (50% -> 75%)
+        processingText.textContent = "🧠 Resolviendo ejercicios...";
         const aiJson = await solveWithMistral(transcription);
+        progressBar.style.width = '75%';
 
         let aiData;
         try {
@@ -488,8 +490,9 @@ async function processImage(imageBlob) {
             overlayProcessing.classList.remove('hidden');
         }
 
-        // Step 5: Saving
-        updateProgress(95, "💾 Guardando en Firebase...");
+        // Step 5: Saving (75% -> 100%)
+        processingText.textContent = "💾 Guardando en Firebase...";
+        progressBar.style.width = '90%';
         const pageData = {
             subject: state.pendingUpload.subject,
             page: parseInt(state.pendingUpload.page),
@@ -501,20 +504,14 @@ async function processImage(imageBlob) {
 
         await db.collection('pages').add(pageData);
 
-        // Wait for minimum duration
-        const elapsed = Date.now() - Date.now();
-        if (elapsed < DURATION) {
-            await new Promise(r => setTimeout(r, DURATION - elapsed));
-        }
-
         // Complete
-        updateProgress(100, "✅ Completado!");
+        processingText.textContent = "✅ Completado!";
         progressBar.style.width = '100%';
 
         setTimeout(() => {
             overlayProcessing.classList.add('hidden');
             navigateTo('view-result', pageData);
-        }, 500);
+        }, 300);
 
     } catch (error) {
         console.error(error);
