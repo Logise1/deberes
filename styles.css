@@ -442,3 +442,24 @@ header h1 {
     font-size: 1.1rem;
     font-weight: 500;
 }
+
+/* Progress Bar Styles */
+.progress-container {
+    width: 80%;
+    max-width: 400px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    margin-top: 1.5rem;
+}
+
+.progress-bar {
+    height: 100%;
+    background: var(--success);
+    width: 0%;
+    border-radius: 10px;
+    transition: width 0.3s ease-out;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}

@@ -35,6 +35,17 @@
 
             <!-- View: Page List -->
             <div id="view-pages" class="view">
+                <!-- Sort Filter -->
+                <div class="filter-bar"
+                    style="padding: 1rem; background: var(--background); border-radius: var(--radius); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <label style="font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Ordenar por:</label>
+                    <select id="sort-selector"
+                        style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: white; font-size: 0.9rem;">
+                        <option value="date">Fecha de subida</option>
+                        <option value="page">Número de página</option>
+                    </select>
+                </div>
+
                 <div class="page-list" id="page-list">
                     <!-- Pages injected by JS -->
                 </div>
@@ -74,9 +85,41 @@
             </div>
         </div>
 
-        <!-- REMOVED CONFIRM MODAL -->
+        <!-- Modal: Username Input -->
+        <div id="modal-username" class="modal">
+            <div class="modal-content bottom-sheet">
+                <h2>¡Bienvenido!</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1rem;">Para que otros sepan quién compartió estas
+                    soluciones, introduce tu nombre:</p>
+                <div class="form-group">
+                    <label>Tu nombre</label>
+                    <input type="text" id="input-username" placeholder="Ej: María García">
+                </div>
+                <div class="modal-actions">
+                    <button id="btn-save-username" class="btn btn-primary">Guardar</button>
+                </div>
+            </div>
+        </div>
 
-        <!-- REMOVED EDIT MODAL -->
+        <!-- Modal: English Subcategory -->
+        <div id="modal-english-sub" class="modal">
+            <div class="modal-content bottom-sheet">
+                <h2>Inglés - Selecciona categoría</h2>
+                <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+                    <button id="btn-students-book" class="btn btn-primary"
+                        style="width: 100%; padding: 1rem; font-size: 1rem;">
+                        📚 Student's Book
+                    </button>
+                    <button id="btn-workbook" class="btn btn-primary"
+                        style="width: 100%; padding: 1rem; font-size: 1rem;">
+                        📝 Workbook
+                    </button>
+                    <button id="btn-cancel-english" class="btn btn-secondary" style="width: 100%;">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Fullscreen Overlay: Camera -->
         <div id="overlay-camera" class="fullscreen-overlay hidden">

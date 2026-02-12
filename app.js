@@ -26,8 +26,11 @@ const state = {
     subjects: [
         'Matemáticas', 'Física y Química', 'Lengua', 'Geografía',
         'TIC', 'ATE', 'EPVA', 'Project', 'Inglés',
-        'Educación Física', 'Tecnología y Digitalización', 'Otros'
+        'Tecnología y Digitalización', 'Otros'
     ],
+    englishCategories: ['Student\'s Book', 'Workbook'], // Subcategories for English
+    sortOrder: 'date', // 'date' or 'page'
+    userName: localStorage.getItem('userName') || null, // User's name
     cameraStream: null,
     unsubscribePages: null,
     pendingUpload: { subject: null, page: null }
@@ -106,6 +109,15 @@ function setupEventListeners() {
 
     btnCloseCamera.addEventListener('click', stopCamera);
     btnCapture.addEventListener('click', handleCapture);
+
+    // Sort selector
+    const sortSelector = document.getElementById('sort-selector');
+    sortSelector.addEventListener('change', (e) => {
+        state.sortOrder = e.target.value;
+        if (state.selectedSubject) {
+            loadPages(state.selectedSubject); // Reload with new sort
+        }
+    });
 }
 
 // --- Navigation & Rendering (Same as before) ---
@@ -113,6 +125,9 @@ function navigateTo(viewId, param = null) {
     Object.values(views).forEach(el => el.classList.remove('active'));
     state.currentView = viewId;
     views[viewId.replace('view-', '')].classList.add('active');
+
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (viewId === 'view-subjects') {
         headerTitle.textContent = "Asignaturas";
@@ -141,9 +156,46 @@ function renderSubjects() {
         card.className = 'subject-card';
         const icon = getSubjectIcon(sub);
         card.innerHTML = `<span class="subject-icon">${icon}</span><div class="subject-name">${sub}</div>`;
-        card.onclick = () => navigateTo('view-pages', sub);
+
+        // Handle English subcategories
+        if (sub === 'Inglés') {
+            card.onclick = () => showEnglishSubcategoryModal();
+        } else {
+            card.onclick = () => navigateTo('view-pages', sub);
+        }
+
         subjectListEl.appendChild(card);
     });
+}
+
+function showEnglishSubcategoryModal() {
+    const modal = document.getElementById('modal-english-sub');
+    showModal(modal);
+
+    const btnStudents = document.getElementById('btn-students-book');
+    const btnWorkbook = document.getElementById('btn-workbook');
+    const btnCancelEnglish = document.getElementById('btn-cancel-english');
+
+    // Clone to remove old listeners
+    const newBtnStudents = btnStudents.cloneNode(true);
+    const newBtnWorkbook = btnWorkbook.cloneNode(true);
+    const newBtnCancel = btnCancelEnglish.cloneNode(true);
+
+    btnStudents.parentNode.replaceChild(newBtnStudents, btnStudents);
+    btnWorkbook.parentNode.replaceChild(newBtnWorkbook, btnWorkbook);
+    btnCancelEnglish.parentNode.replaceChild(newBtnCancel, btnCancelEnglish);
+
+    newBtnStudents.onclick = () => {
+        hideModal(modal);
+        navigateTo('view-pages', 'Inglés - Student\'s Book');
+    };
+
+    newBtnWorkbook.onclick = () => {
+        hideModal(modal);
+        navigateTo('view-pages', 'Inglés - Workbook');
+    };
+
+    newBtnCancel.onclick = () => hideModal(modal);
 }
 
 function getSubjectIcon(subject) {
@@ -159,10 +211,20 @@ function getSubjectIcon(subject) {
 function populateSubjectSelect() {
     selectSubject.innerHTML = '';
     state.subjects.forEach(sub => {
-        const opt = document.createElement('option');
-        opt.value = sub;
-        opt.textContent = sub;
-        selectSubject.appendChild(opt);
+        if (sub === 'Inglés') {
+            // Add subcategories for English
+            state.englishCategories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = `Inglés - ${cat}`;
+                opt.textContent = `Inglés - ${cat}`;
+                selectSubject.appendChild(opt);
+            });
+        } else {
+            const opt = document.createElement('option');
+            opt.value = sub;
+            opt.textContent = sub;
+            selectSubject.appendChild(opt);
+        }
     });
 }
 
@@ -170,30 +232,39 @@ function loadPages(subject) {
     pageListEl.innerHTML = '<div class="spinner" style="border-color: var(--primary-color); border-top-color: transparent; margin: 2rem auto;"></div>';
     if (state.unsubscribePages) state.unsubscribePages();
 
-    state.unsubscribePages = db.collection('pages')
-        .where('subject', '==', subject)
-        .orderBy('timestamp', 'desc')
-        .onSnapshot(snapshot => {
-            pageListEl.innerHTML = '';
-            if (snapshot.empty) {
-                pageListEl.innerHTML = '<p style="text-align:center; color: var(--text-muted);">No hay páginas escaneadas aún.</p>';
-                return;
-            }
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                const item = document.createElement('div');
-                item.className = 'page-item';
-                item.innerHTML = `
+    // Build query based on sort order
+    let query = db.collection('pages').where('subject', '==', subject);
+
+    if (state.sortOrder === 'date') {
+        query = query.orderBy('timestamp', 'desc');
+    } else {
+        query = query.orderBy('page', 'asc');
+    }
+
+    state.unsubscribePages = query.onSnapshot(snapshot => {
+        pageListEl.innerHTML = '';
+        if (snapshot.empty) {
+            pageListEl.innerHTML = '<p style="text-align:center; color: var(--text-muted);">No hay páginas escaneadas aún.</p>';
+            return;
+        }
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const item = document.createElement('div');
+            item.className = 'page-item';
+            item.innerHTML = `
+                <div style="flex-grow: 1;">
                     <span class="page-number">Pág ${data.page}</span>
-                    <span class="page-status">Ver solución ›</span>
-                `;
-                item.onclick = () => navigateTo('view-result', data);
-                pageListEl.appendChild(item);
-            });
-        }, error => {
-            console.error("Error watching pages: ", error);
-            pageListEl.innerHTML = `<p style="color:var(--error)">Error al cargar páginas.</p>`;
+                    ${data.providedBy ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Proporcionado por ${data.providedBy}</div>` : ''}
+                </div>
+                <span class="page-status">Ver solución ›</span>
+            `;
+            item.onclick = () => navigateTo('view-result', data);
+            pageListEl.appendChild(item);
         });
+    }, error => {
+        console.error("Error watching pages: ", error);
+        pageListEl.innerHTML = `<p style="color:var(--error)">Error al cargar páginas.</p>`;
+    });
 }
 
 function renderResult(pageData) {
@@ -403,13 +474,28 @@ async function processImage(imageBlob) {
             aiData = { exercises: [] };
         }
 
-        // Step 4: Saving
+        // Step 4: Check for username
+        if (!state.userName) {
+            // Hide processing, ask for name
+            overlayProcessing.classList.add('hidden');
+            const name = await promptForUsername();
+            if (!name) {
+                throw new Error("Nombre requerido para continuar");
+            }
+            state.userName = name;
+            localStorage.setItem('userName', name);
+            // Show processing again
+            overlayProcessing.classList.remove('hidden');
+        }
+
+        // Step 5: Saving
         updateProgress(95, "💾 Guardando en Firebase...");
         const pageData = {
             subject: state.pendingUpload.subject,
             page: parseInt(state.pendingUpload.page),
             imageUrl: imageUrl,
             solution: aiData.exercises || aiData,
+            providedBy: state.userName,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
 
@@ -439,6 +525,39 @@ async function processImage(imageBlob) {
             alert("Error: " + error.message);
         }, 2000);
     }
+}
+
+function promptForUsername() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modal-username');
+        const inputUsername = document.getElementById('input-username');
+        const btnSave = document.getElementById('btn-save-username');
+
+        // Clone button to remove old listeners
+        const newBtnSave = btnSave.cloneNode(true);
+        btnSave.parentNode.replaceChild(newBtnSave, btnSave);
+
+        inputUsername.value = '';
+        showModal(modal);
+        inputUsername.focus();
+
+        newBtnSave.onclick = () => {
+            const name = inputUsername.value.trim();
+            if (!name) {
+                alert("Por favor introduce tu nombre");
+                return;
+            }
+            hideModal(modal);
+            resolve(name);
+        };
+
+        // Enter key support
+        inputUsername.onkeypress = (e) => {
+            if (e.key === 'Enter') {
+                newBtnSave.click();
+            }
+        };
+    });
 }
 
 async function uploadToGreenHost(blob) {
