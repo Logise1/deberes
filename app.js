@@ -1,5 +1,3 @@
-/* COMPLETE CLEAN FILE */
-
 // Firebase Configuration
 const firebaseConfig = {
     apiKey: "AIzaSyDPEsl_dE1fzYkuxemJRvhDxpfvYZfgGZo",
@@ -11,7 +9,6 @@ const firebaseConfig = {
     measurementId: "G-RRR30MYKXW"
 };
 
-// Initialize Firebase
 try {
     firebase.initializeApp(firebaseConfig);
     console.log("Firebase initialized");
@@ -27,18 +24,9 @@ const state = {
     selectedSubject: null,
     selectedPage: null,
     subjects: [
-        'Matemáticas',
-        'Física y Química',
-        'Lengua',
-        'Geografía',
-        'TIC',
-        'ATE',
-        'EPVA',
-        'Project',
-        'Inglés',
-        'Educación Física',
-        'Tecnología y Digitalización',
-        'Otros'
+        'Matemáticas', 'Física y Química', 'Lengua', 'Geografía',
+        'TIC', 'ATE', 'EPVA', 'Project', 'Inglés',
+        'Educación Física', 'Tecnología y Digitalización', 'Otros'
     ],
     cameraStream: null,
     unsubscribePages: null,
@@ -68,9 +56,9 @@ const btnCapture = document.getElementById('btn-capture');
 const btnCloseCamera = document.getElementById('btn-close-camera');
 const overlayProcessing = document.getElementById('overlay-processing');
 const processingText = document.getElementById('processing-text');
+const progressBar = document.getElementById('progress-bar'); // NEW
 const canvas = document.getElementById('camera-canvas');
 
-// API Configuration
 const MISTRAL_API_KEY = "evxly62Xv91b752fbnHA2I3HD988C5RT";
 const GREENHOST_API_URL = "https://greenbase.arielcapdevila.com";
 
@@ -83,7 +71,6 @@ function init() {
 }
 
 function setupEventListeners() {
-    // Navigation
     backBtn.addEventListener('click', () => {
         if (state.currentView === 'view-result') {
             navigateTo('view-pages', state.selectedSubject);
@@ -92,38 +79,38 @@ function setupEventListeners() {
         }
     });
 
-    // FAB
     fabAdd.addEventListener('click', () => {
         if (state.selectedSubject) {
             selectSubject.value = state.selectedSubject;
         }
+        inputPage.value = ''; // Reset
         showModal(modalSelect);
     });
 
-    // Modal Actions
     btnCancelSelect.addEventListener('click', () => hideModal(modalSelect));
 
     btnConfirmSelect.addEventListener('click', () => {
         const subject = selectSubject.value;
-        const page = inputPage.value || '?';
-        if (subject) {
-            hideModal(modalSelect);
-            startCameraFlow(subject, page);
-        } else {
+        const page = inputPage.value;
+        if (!subject) {
             alert("Por favor selecciona asignatura");
+            return;
         }
+        if (!page) {
+            alert("Por favor introduce el número de página");
+            return;
+        }
+        hideModal(modalSelect);
+        startCameraFlow(subject, page);
     });
 
-    // Camera Actions
     btnCloseCamera.addEventListener('click', stopCamera);
     btnCapture.addEventListener('click', handleCapture);
 }
 
-// --- Navigation & Rendering ---
-
+// --- Navigation & Rendering (Same as before) ---
 function navigateTo(viewId, param = null) {
     Object.values(views).forEach(el => el.classList.remove('active'));
-
     state.currentView = viewId;
     views[viewId.replace('view-', '')].classList.add('active');
 
@@ -161,18 +148,10 @@ function renderSubjects() {
 
 function getSubjectIcon(subject) {
     const icons = {
-        'Matemáticas': '📐',
-        'Física y Química': '🧪',
-        'Lengua': '📚',
-        'Geografía': '🌍',
-        'TIC': '💻',
-        'ATE': '🧩',
-        'EPVA': '🎨',
-        'Project': '🚀',
-        'Inglés': '🇬🇧',
-        'Educación Física': '⚽',
-        'Tecnología y Digitalización': '🤖',
-        'Otros': '📦'
+        'Matemáticas': '📐', 'Física y Química': '🧪', 'Lengua': '📚',
+        'Geografía': '🌍', 'TIC': '💻', 'ATE': '🧩', 'EPVA': '🎨',
+        'Project': '🚀', 'Inglés': '🇬🇧', 'Educación Física': '⚽',
+        'Tecnología y Digitalización': '🤖', 'Otros': '📦'
     };
     return icons[subject] || '📝';
 }
@@ -187,14 +166,9 @@ function populateSubjectSelect() {
     });
 }
 
-// --- Firebase Data Fetching ---
-
 function loadPages(subject) {
     pageListEl.innerHTML = '<div class="spinner" style="border-color: var(--primary-color); border-top-color: transparent; margin: 2rem auto;"></div>';
-
-    if (state.unsubscribePages) {
-        state.unsubscribePages();
-    }
+    if (state.unsubscribePages) state.unsubscribePages();
 
     state.unsubscribePages = db.collection('pages')
         .where('subject', '==', subject)
@@ -205,7 +179,6 @@ function loadPages(subject) {
                 pageListEl.innerHTML = '<p style="text-align:center; color: var(--text-muted);">No hay páginas escaneadas aún.</p>';
                 return;
             }
-
             snapshot.forEach(doc => {
                 const data = doc.data();
                 const item = document.createElement('div');
@@ -234,7 +207,7 @@ function renderResult(pageData) {
         }
     } catch (e) {
         console.error("JSON Parse Error", e);
-        resultContent.innerHTML = `<div class="exercise-card"><p>Error al procesar la respuesta de la IA. Visualiza la imagen original.</p></div>`;
+        resultContent.innerHTML = `<div class="exercise-card"><p>Error al procesar la respuesta de la IA.</p></div>`;
     }
 
     let html = `
@@ -244,107 +217,76 @@ function renderResult(pageData) {
         </div>
     `;
 
-    if (solution.exercises) {
-        solution = solution.exercises;
-    }
+    if (solution.exercises) solution = solution.exercises;
 
     if (Array.isArray(solution)) {
         const renderValue = (val) => {
             if (val === null || val === undefined) return '';
-
             if (Array.isArray(val)) {
-                return `<ul style="padding-left:1.2rem; margin:0.5rem 0; list-style-type: none;">
-                    ${val.map(v => `<li>• ${renderValue(v)}</li>`).join('')}
+                return `<ul style="padding-left:1.2rem; margin:0.5rem 0;">
+                    ${val.map(v => `<li>${renderValue(v)}</li>`).join('')}
                 </ul>`;
             }
-
             if (typeof val === 'object') {
-                return `<div style="margin-left: 0.5rem; display: flex; flex-direction: column; gap: 4px;">
-                    ${Object.entries(val).map(([k, v]) => `
-                        <div><strong style="color:var(--secondary-color);">${k}:</strong> ${renderValue(v)}</div>
-                    `).join('')}
+                return `<div style="margin-left: 0.5rem;">
+                    ${Object.entries(val).map(([k, v]) => `<div><strong>${k}:</strong> ${renderValue(v)}</div>`).join('')}
                 </div>`;
             }
             return val;
         };
 
         solution.forEach((item, index) => {
-            const answer = item.solution || item.answer;
-            const displayAnswer = renderValue(answer);
-
             html += `
-                <div class="exercise-card" style="border-left: 4px solid var(--primary-color);">
+                <div class="exercise-card">
                     <div class="exercise-header" style="margin-bottom:0.5rem;">
-                        <span style="font-weight:700; color:var(--primary-color); font-size:1.1em; margin-right: 0.5rem;">${item.exercise || (index + 1)}.</span>
-                        <span style="font-weight:600; color:var(--text-main);">${item.question || ''}</span>
+                        <span style="font-weight:700; color:var(--primary-color); margin-right: 0.5rem;">${item.exercise || (index + 1)}.</span>
+                        <span style="font-weight:600;">${item.question || ''}</span>
                     </div>
-                    <div class="exercise-body" style="color:var(--text-muted); padding-left: 1rem; font-family: monospace; font-size: 0.95em;">
-                        ${displayAnswer || 'Ver imagen'}
+                    <div class="exercise-body" style="color:var(--text-muted);">
+                        ${renderValue(item.solution || item.answer)}
                     </div>
                 </div>
             `;
         });
     } else {
-        html += `<pre style="white-space: pre-wrap;">${JSON.stringify(solution, null, 2)}</pre>`;
+        html += `<pre>${JSON.stringify(solution, null, 2)}</pre>`;
     }
-
     resultContent.innerHTML = html;
 }
 
-// --- Camera & Flow ---
+// --- Camera & Overlay ---
 
 function showModal(modal) {
     modal.classList.add('visible');
-    requestAnimationFrame(() => {
-        modal.style.opacity = '1';
-    });
+    requestAnimationFrame(() => modal.style.opacity = '1');
 }
 
 function hideModal(modal) {
     modal.style.opacity = '0';
-    setTimeout(() => {
-        modal.classList.remove('visible');
-    }, 300);
+    setTimeout(() => modal.classList.remove('visible'), 300);
 }
 
 function startCameraFlow(subject, page) {
-    console.log(`Starting camera for ${subject} page ${page}`);
     state.pendingUpload = { subject, page };
-
     overlayCamera.classList.remove('hidden');
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: { exact: "environment" },
-                width: { ideal: 4096 },
-                height: { ideal: 2160 }
-            }
+            video: { facingMode: { exact: "environment" }, width: { ideal: 4096 }, height: { ideal: 2160 } }
         })
             .then(stream => {
                 state.cameraStream = stream;
                 videoEl.srcObject = stream;
             })
             .catch(err => {
-                console.warn("Rear camera failed, trying default", err);
-                navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: { ideal: 4096 },
-                        height: { ideal: 2160 }
-                    }
-                })
+                navigator.mediaDevices.getUserMedia({ video: true })
                     .then(stream => {
                         state.cameraStream = stream;
                         videoEl.srcObject = stream;
-                    })
-                    .catch(e => {
-                        alert("No se pudo acceder a la cámara.");
-                        stopCamera();
                     });
             });
     } else {
-        alert("Tu navegador no soporta acceso a cámara.");
-        stopCamera();
+        alert("Sin acceso a cámara");
     }
 }
 
@@ -357,64 +299,70 @@ function stopCamera() {
 }
 
 async function handleCapture() {
-    const width = videoEl.videoWidth;
-    const height = videoEl.videoHeight;
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(videoEl, 0, 0, width, height);
-
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    canvas.getContext('2d').drawImage(videoEl, 0, 0);
     stopCamera();
 
+    // Show Progress Overlay
     overlayProcessing.classList.remove('hidden');
-    processingText.textContent = "Procesando...";
+    processingText.textContent = "Analizando (20s)...";
+    progressBar.style.width = '0%';
 
     canvas.toBlob(blob => {
-        if (blob) {
-            processImage(blob);
-        } else {
-            alert("Error al capturar.");
-            overlayProcessing.classList.add('hidden');
-        }
+        if (blob) processImage(blob);
     }, 'image/jpeg', 0.85);
 }
 
-// --- Processing Logic ---
+// --- Processing with 20s Timer ---
 
 async function processImage(imageBlob) {
+    const startTime = Date.now();
+    const DURATION = 20000; // 20 seconds target
+    let progressInterval;
+
     try {
-        processingText.textContent = "Subiendo imagen...";
-        const imageUrl = await uploadToGreenHost(imageBlob);
-        console.log("Uploaded Image URL:", imageUrl);
+        // Start Progress Bar Animation
+        let progress = 0;
+        const step = 100 / (DURATION / 100); // Update every 100ms
+        progressInterval = setInterval(() => {
+            progress = Math.min(progress + step, 98); // Cap at 98 until done
+            progressBar.style.width = `${progress}%`;
+        }, 100);
 
-        processingText.textContent = "Leyendo ejercicios...";
-        const transcription = await extractTextWithPixtral(imageUrl);
-        console.log("Transcription:", transcription);
+        // --- Actual Work (Parallel) ---
+        // We run the API calls. We do NOT await them immediately to block the timer check.
+        // But actually, simpler: Promise.all([apiCalls, timer])
 
-        processingText.textContent = "Resolviendo deberes...";
-        const aiResultJson = await solveWithMistral(transcription);
+        const apiWork = async () => {
+            // 1. Upload
+            const imageUrl = await uploadToGreenHost(imageBlob);
 
-        let aiData;
-        try {
-            aiData = JSON.parse(aiResultJson);
-        } catch (e) {
-            console.error("Error parsing AI JSON", e);
-            throw new Error("Error al procesar la respuesta de la IA");
-        }
+            // 2. Pixtral Text
+            const transcription = await extractTextWithPixtral(imageUrl);
 
-        overlayProcessing.classList.add('hidden');
+            // 3. Mistral Solve (No page detection)
+            const aiJson = await solveWithMistral(transcription);
 
-        const detectedPage = aiData.page || state.pendingUpload.page;
-        const confirmedPage = await confirmPageNumber(detectedPage);
+            let aiData;
+            try { aiData = JSON.parse(aiJson); } catch (e) { aiData = { exercises: [] }; }
 
-        if (!confirmedPage) {
-            return;
-        }
+            return { imageUrl, aiData };
+        };
 
-        state.pendingUpload.page = parseInt(confirmedPage);
-        processingText.textContent = "Guardando...";
-        overlayProcessing.classList.remove('hidden');
+        const timerWork = new Promise(resolve => setTimeout(resolve, DURATION));
 
+        // Race minimum duration: wait for BOTH works to finish
+        // If API is fast, timerWork holds it back.
+        // If API is slow, we wait for API.
+        const [result] = await Promise.all([apiWork(), timerWork]);
+
+        // Done
+        clearInterval(progressInterval);
+        progressBar.style.width = '100%';
+
+        // Save
+        const { imageUrl, aiData } = result;
         const pageData = {
             subject: state.pendingUpload.subject,
             page: parseInt(state.pendingUpload.page),
@@ -425,180 +373,67 @@ async function processImage(imageBlob) {
 
         await db.collection('pages').add(pageData);
 
-        overlayProcessing.classList.add('hidden');
-        navigateTo('view-result', pageData);
+        // Small delay to see 100%
+        setTimeout(() => {
+            overlayProcessing.classList.add('hidden');
+            navigateTo('view-result', pageData);
+        }, 500);
 
     } catch (error) {
-        console.error("Processing Flow Error:", error);
-        alert("Hubo un error: " + error.message);
+        clearInterval(progressInterval);
+        console.error(error);
+        alert("Error: " + error.message);
         overlayProcessing.classList.add('hidden');
     }
 }
 
 async function uploadToGreenHost(blob) {
     const formData = new FormData();
-    formData.append('file', blob, 'page_scan.jpg');
-
-    const response = await fetch(`${GREENHOST_API_URL}/upload`, {
-        method: 'POST',
-        body: formData
-    });
-
-    if (!response.ok) {
-        const txt = await response.text();
-        throw new Error(`Error subida: ${response.status} ${txt}`);
-    }
-
-    const data = await response.json();
-    return `${GREENHOST_API_URL}/file/${data.id}`;
+    formData.append('file', blob, 'scan.jpg');
+    const res = await fetch(`${GREENHOST_API_URL}/upload`, { method: 'POST', body: formData });
+    if (!res.ok) throw new Error("Upload failed");
+    return `${GREENHOST_API_URL}/file/${(await res.json()).id}`;
 }
 
 async function extractTextWithPixtral(imageUrl) {
-    const prompt = `
-        Transcribe ABSOLUTAMENTE TODO el texto de esta página de deberes.
-        No resuelvas nada.
-        Tu único objetivo es copiar fielmente cada palabra, número y enunciado que veas.
-        Separa claramente los ejercicios.
-    `;
-
-    const payload = {
-        model: "pixtral-12b-latest",
-        messages: [
-            {
-                role: "user",
-                content: [
-                    { type: "text", text: prompt },
-                    { type: "image_url", image_url: imageUrl }
-                ]
-            }
-        ],
-        temperature: 0.1
-    };
-
-    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    const prompt = "Transcribe TODO el texto de los ejercicios. Solo texto.";
+    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${MISTRAL_API_KEY}`
-        },
-        body: JSON.stringify(payload)
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${MISTRAL_API_KEY}` },
+        body: JSON.stringify({
+            model: "pixtral-12b-latest",
+            messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: imageUrl }] }],
+            temperature: 0.1
+        })
     });
-
-    if (!response.ok) throw new Error("Pixtral Error");
-    const data = await response.json();
-    return data.choices[0].message.content;
+    if (!res.ok) throw new Error("Pixtral failed");
+    return (await res.json()).choices[0].message.content;
 }
 
 async function solveWithMistral(transcription) {
     const prompt = `
-        Eres un profesor experto. Aquí tienes la transcripción de una hoja de deberes:
+        Eres un profesor. Resuelve estos ejercicios escolares:
         ---
         ${transcription}
         ---
-        
-        Tu tarea es:
-        1. Identificar el NÚMERO DE PÁGINA si aparece en el texto.
-        2. Identificar TODOS los ejercicios.
-        3. RESOLVERLOS todos correctamentes.
-        
-        IMPORTANTE: Devuelve la respuesta SOLAMENTE en formato JSON.
-        Formato:
+        Formato JSON:
         {
-          "page": "Número de página detectado (o null si no lo ves)",
           "exercises": [
-            { 
-              "exercise": "Número (ej: 3)", 
-              "question": "Enunciado breve", 
-              "solution": "Respuesta concisa." 
-            }
+            { "exercise": "1", "question": "...", "solution": "..." }
           ]
         }
     `;
-
-    const payload = {
-        model: "mistral-large-latest",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.2,
-        response_format: { type: "json_object" }
-    };
-
-    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${MISTRAL_API_KEY}`
-        },
-        body: JSON.stringify(payload)
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${MISTRAL_API_KEY}` },
+        body: JSON.stringify({
+            model: "mistral-large-latest",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" }
+        })
     });
-
-    if (!response.ok) throw new Error("Mistral Logic Error");
-    const data = await response.json();
-    return data.choices[0].message.content;
-}
-
-// Confirm Page Modal Logic
-function confirmPageNumber(detectedPage) {
-    return new Promise((resolve) => {
-        const modalConfirm = document.getElementById('modal-confirm-page');
-        const modalEdit = document.getElementById('modal-edit-page');
-
-        // Elementos dentro de los modales (añadidos en modal.html antes)
-        const display = document.getElementById('confirm-page-display');
-        const btnYesOriginal = document.getElementById('btn-page-yes');
-        const btnNoOriginal = document.getElementById('btn-page-no');
-
-        // Modal Edit elements
-        const btnSaveOriginal = document.getElementById('btn-save-page');
-        const inputCorrect = document.getElementById('input-correct-page');
-
-        // Logic
-        let currentGuess = (detectedPage && detectedPage !== '?' && detectedPage !== null) ? detectedPage : state.pendingUpload.page;
-        if (currentGuess === '?' || !currentGuess) currentGuess = '--';
-
-        display.textContent = currentGuess;
-        inputCorrect.value = '';
-
-        showModal(modalConfirm);
-
-        // Replace buttons to clear previous listeners
-        const btnYes = btnYesOriginal.cloneNode(true);
-        const btnNo = btnNoOriginal.cloneNode(true);
-        const btnSave = btnSaveOriginal.cloneNode(true);
-
-        btnYesOriginal.parentNode.replaceChild(btnYes, btnYesOriginal);
-        btnNoOriginal.parentNode.replaceChild(btnNo, btnNoOriginal);
-        btnSaveOriginal.parentNode.replaceChild(btnSave, btnSaveOriginal);
-
-        btnYes.onclick = () => {
-            hideModal(modalConfirm);
-            if (currentGuess === '--') {
-                setTimeout(() => {
-                    inputCorrect.value = '';
-                    showModal(modalEdit);
-                }, 300);
-            } else {
-                resolve(currentGuess);
-            }
-        };
-
-        btnNo.onclick = () => {
-            hideModal(modalConfirm);
-            setTimeout(() => {
-                inputCorrect.value = (currentGuess !== '--') ? currentGuess : '';
-                showModal(modalEdit);
-            }, 300);
-        };
-
-        btnSave.onclick = () => {
-            const val = inputCorrect.value;
-            if (val) {
-                hideModal(modalEdit);
-                resolve(val);
-            } else {
-                alert("Introduce un número");
-            }
-        };
-    });
+    if (!res.ok) throw new Error("Mistral failed");
+    return (await res.json()).choices[0].message.content;
 }
 
 document.addEventListener('DOMContentLoaded', init);

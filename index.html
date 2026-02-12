@@ -64,8 +64,8 @@
                     <select id="select-subject"></select>
                 </div>
                 <div class="form-group">
-                    <label>Página del libro (Opcional)</label>
-                    <input type="number" id="input-page" placeholder="Ej: 42 (Dejar vacío para detectar)">
+                    <label>Página del libro (Obligatorio)</label>
+                    <input type="number" id="input-page" placeholder="Ej: 42 (Requerido)">
                 </div>
                 <div class="modal-actions">
                     <button id="btn-cancel-select" class="btn btn-secondary">Cancelar</button>
@@ -74,38 +74,9 @@
             </div>
         </div>
 
-        <!-- Modal: Confirm Page -->
-        <div id="modal-confirm-page" class="modal" style="align-items: center;">
-            <div class="modal-content" style="max-width: 300px; border-radius: 20px; text-align: center;">
-                <h2>Confirmar Página</h2>
-                <p style="color: var(--text-muted); margin-bottom: 1rem;">¿Es esta la página del libro?</p>
+        <!-- REMOVED CONFIRM MODAL -->
 
-                <div id="confirm-page-display"
-                    style="font-size: 4rem; font-weight: 800; color: var(--primary-color); margin-bottom: 1.5rem;">--
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                    <button id="btn-page-yes" class="btn btn-primary" style="width: 100%; padding: 1rem;">Sí, es
-                        correcta</button>
-                    <button id="btn-page-no" class="btn btn-secondary" style="width: 100%; padding: 1rem;">No,
-                        corregir</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal: Edit Page Number -->
-        <div id="modal-edit-page" class="modal">
-            <div class="modal-content bottom-sheet">
-                <h2>Corregir Página</h2>
-                <div class="form-group">
-                    <label>Introduce el número correcto:</label>
-                    <input type="number" id="input-correct-page" placeholder="Ej: 42">
-                </div>
-                <div class="modal-actions">
-                    <button id="btn-save-page" class="btn btn-primary">Guardar</button>
-                </div>
-            </div>
-        </div>
+        <!-- REMOVED EDIT MODAL -->
 
         <!-- Fullscreen Overlay: Camera -->
         <div id="overlay-camera" class="fullscreen-overlay hidden">
@@ -131,7 +102,10 @@
         <!-- Fullscreen Overlay: Processing -->
         <div id="overlay-processing" class="fullscreen-overlay hidden flex-center">
             <div class="spinner"></div>
-            <p id="processing-text">Procesando...</p>
+            <p id="processing-text" style="color:white; margin-bottom: 0.5rem;">Procesando...</p>
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
         </div>
     </div>
 
