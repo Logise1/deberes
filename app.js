@@ -277,14 +277,13 @@ function renderResult(pageData) {
             const displayAnswer = renderValue(answer);
 
             html += `
-                <div class="exercise-card">
-                    <div class="exercise-title">
-                        <span>${item.exercise || `Ejercicio ${index + 1}`}</span>
+                <div class="exercise-card" style="border-left: 4px solid var(--primary-color);">
+                    <div class="exercise-header" style="margin-bottom:0.5rem;">
+                        <span style="font-weight:700; color:var(--primary-color); font-size:1.1em; margin-right: 0.5rem;">${item.exercise || (index + 1)}.</span>
+                        <span style="font-weight:600; color:var(--text-main);">${item.question || ''}</span>
                     </div>
-                    <div class="exercise-content">
-                        <strong>Pregunta:</strong> ${item.question || 'N/A'}<br><br>
-                        <strong>Respuesta:</strong> 
-                        <div style="margin-top:0.5rem;">${displayAnswer || 'Ver imagen'}</div>
+                    <div class="exercise-body" style="color:var(--text-muted); padding-left: 1rem; font-family: monospace; font-size: 0.95em;">
+                        ${displayAnswer || 'Ver imagen'}
                     </div>
                 </div>
             `;
@@ -454,14 +453,22 @@ async function uploadToGreenHost(blob) {
 async function callMistralAI(imageUrl) {
     const prompt = `
         Analiza esta imagen de deberes escolares.
-        Identifica cada ejercicio visible en la página.
-        Resuelve cada ejercicio paso a paso de manera clara.
-        IMPORTANTE: Devuelve la respuesta SOLAMENTE en formato JSON válido.
-        El formato debe ser una lista de objetos: 
+        Identifica cada ejercicio visible.
+        Resuelve cada ejercicio con el formato solicitado:
+        
+        FORMATO DE SALIDA (JSON):
         [
-            { "exercise": "Número o Título del ejercicio", "question": "Texto de la pregunta", "solution": "Resolución detallada" }
+          { 
+            "exercise": "Número (ej: 3, 2a)", 
+            "question": "Enunciado breve", 
+            "solution": "Respuesta concisa. Ej: '1-b, 2-c' o '(a) back (b) from'." 
+          }
         ]
-        No añadas texto antes ni después del JSON.
+        
+        REGLAS:
+        - Para ejercicios de unir (match): Formato "1-a, 2-b, 3-c".
+        - Para rellenar huecos (cloze): Formato "(1) respuesta (2) respuesta".
+        - Sé muy conciso. No expliques, solo da la solución.
     `;
 
     const payload = {
