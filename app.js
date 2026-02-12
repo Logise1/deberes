@@ -1,3 +1,5 @@
+/* COMPLETE CLEAN FILE */
+
 // Firebase Configuration
 const firebaseConfig = {
     apiKey: "AIzaSyDPEsl_dE1fzYkuxemJRvhDxpfvYZfgGZo",
@@ -39,7 +41,8 @@ const state = {
         'Otros'
     ],
     cameraStream: null,
-    unsubscribePages: null
+    unsubscribePages: null,
+    pendingUpload: { subject: null, page: null }
 };
 
 // DOM Elements
@@ -68,7 +71,7 @@ const processingText = document.getElementById('processing-text');
 const canvas = document.getElementById('camera-canvas');
 
 // API Configuration
-const MISTRAL_API_KEY = "evxly62Xv91b752fbnHA2I3HD988C5RT"; // Note: Client-side exposure is risky in prod.
+const MISTRAL_API_KEY = "evxly62Xv91b752fbnHA2I3HD988C5RT";
 const GREENHOST_API_URL = "https://greenbase.arielcapdevila.com";
 
 // --- Initialization ---
@@ -91,7 +94,6 @@ function setupEventListeners() {
 
     // FAB
     fabAdd.addEventListener('click', () => {
-        // Pre-select current subject if in page view
         if (state.selectedSubject) {
             selectSubject.value = state.selectedSubject;
         }
@@ -103,12 +105,12 @@ function setupEventListeners() {
 
     btnConfirmSelect.addEventListener('click', () => {
         const subject = selectSubject.value;
-        const page = inputPage.value;
-        if (subject && page) {
+        const page = inputPage.value || '?';
+        if (subject) {
             hideModal(modalSelect);
             startCameraFlow(subject, page);
         } else {
-            alert("Por favor selecciona asignatura y página");
+            alert("Por favor selecciona asignatura");
         }
     });
 
@@ -120,14 +122,11 @@ function setupEventListeners() {
 // --- Navigation & Rendering ---
 
 function navigateTo(viewId, param = null) {
-    // Hide all views
     Object.values(views).forEach(el => el.classList.remove('active'));
 
-    // Update State & View
     state.currentView = viewId;
     views[viewId.replace('view-', '')].classList.add('active');
 
-    // Header Logic
     if (viewId === 'view-subjects') {
         headerTitle.textContent = "Asignaturas";
         backBtn.classList.add('hidden');
@@ -140,11 +139,10 @@ function navigateTo(viewId, param = null) {
         fabAdd.classList.remove('hidden');
         loadPages(param);
     } else if (viewId === 'view-result') {
-        // Param is page object
         state.selectedPage = param;
         headerTitle.textContent = `Pág ${param.page}`;
         backBtn.classList.remove('hidden');
-        fabAdd.classList.add('hidden'); // Hide add button on result view
+        fabAdd.classList.add('hidden');
         renderResult(param);
     }
 }
@@ -154,7 +152,6 @@ function renderSubjects() {
     state.subjects.forEach(sub => {
         const card = document.createElement('div');
         card.className = 'subject-card';
-        // Simple icon mapping just for visuals
         const icon = getSubjectIcon(sub);
         card.innerHTML = `<span class="subject-icon">${icon}</span><div class="subject-name">${sub}</div>`;
         card.onclick = () => navigateTo('view-pages', sub);
@@ -195,7 +192,6 @@ function populateSubjectSelect() {
 function loadPages(subject) {
     pageListEl.innerHTML = '<div class="spinner" style="border-color: var(--primary-color); border-top-color: transparent; margin: 2rem auto;"></div>';
 
-    // Detach previous listener if exists (store in state)
     if (state.unsubscribePages) {
         state.unsubscribePages();
     }
@@ -228,11 +224,9 @@ function loadPages(subject) {
 }
 
 function renderResult(pageData) {
-    // Parse JSON solution if string, or use directly
     let solution = [];
     try {
         if (typeof pageData.solution === 'string') {
-            // Clean markdown json blocks if present
             const cleanJson = pageData.solution.replace(/```json/g, '').replace(/```/g, '').trim();
             solution = JSON.parse(cleanJson);
         } else {
@@ -250,8 +244,11 @@ function renderResult(pageData) {
         </div>
     `;
 
+    if (solution.exercises) {
+        solution = solution.exercises;
+    }
+
     if (Array.isArray(solution)) {
-        // Recursive function to render complex objects/arrays
         const renderValue = (val) => {
             if (val === null || val === undefined) return '';
 
@@ -262,7 +259,6 @@ function renderResult(pageData) {
             }
 
             if (typeof val === 'object') {
-                // Flatten object to key: value
                 return `<div style="margin-left: 0.5rem; display: flex; flex-direction: column; gap: 4px;">
                     ${Object.entries(val).map(([k, v]) => `
                         <div><strong style="color:var(--secondary-color);">${k}:</strong> ${renderValue(v)}</div>
@@ -298,8 +294,7 @@ function renderResult(pageData) {
 // --- Camera & Flow ---
 
 function showModal(modal) {
-    modal.classList.add('visible'); // Flex display handled by class
-    // Animation via CSS opacity
+    modal.classList.add('visible');
     requestAnimationFrame(() => {
         modal.style.opacity = '1';
     });
@@ -316,15 +311,13 @@ function startCameraFlow(subject, page) {
     console.log(`Starting camera for ${subject} page ${page}`);
     state.pendingUpload = { subject, page };
 
-    // Show Fullscreen Camera
     overlayCamera.classList.remove('hidden');
 
-    // Init Camera
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({
             video: {
                 facingMode: { exact: "environment" },
-                width: { ideal: 4096 }, // Request 4K or highest
+                width: { ideal: 4096 },
                 height: { ideal: 2160 }
             }
         })
@@ -334,7 +327,6 @@ function startCameraFlow(subject, page) {
             })
             .catch(err => {
                 console.warn("Rear camera failed, trying default", err);
-                // Fallback
                 navigator.mediaDevices.getUserMedia({
                     video: {
                         width: { ideal: 4096 },
@@ -365,7 +357,6 @@ function stopCamera() {
 }
 
 async function handleCapture() {
-    // Draw video frame to canvas
     const width = videoEl.videoWidth;
     const height = videoEl.videoHeight;
     canvas.width = width;
@@ -373,13 +364,11 @@ async function handleCapture() {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(videoEl, 0, 0, width, height);
 
-    stopCamera(); // Stop processing stream
+    stopCamera();
 
-    // Show Processing
     overlayProcessing.classList.remove('hidden');
     processingText.textContent = "Procesando...";
 
-    // Convert to Blob
     canvas.toBlob(blob => {
         if (blob) {
             processImage(blob);
@@ -394,35 +383,49 @@ async function handleCapture() {
 
 async function processImage(imageBlob) {
     try {
-        // 1. Upload to GreenHost
         processingText.textContent = "Subiendo imagen...";
         const imageUrl = await uploadToGreenHost(imageBlob);
         console.log("Uploaded Image URL:", imageUrl);
 
-        // 2. Mistral AI Analysis
-        processingText.textContent = "Analizando ejercicios...";
-        const aiResult = await callMistralAI(imageUrl);
-        console.log("AI Result:", aiResult);
+        processingText.textContent = "Leyendo ejercicios...";
+        const transcription = await extractTextWithPixtral(imageUrl);
+        console.log("Transcription:", transcription);
 
-        // 3. Save to Firestore
+        processingText.textContent = "Resolviendo deberes...";
+        const aiResultJson = await solveWithMistral(transcription);
+
+        let aiData;
+        try {
+            aiData = JSON.parse(aiResultJson);
+        } catch (e) {
+            console.error("Error parsing AI JSON", e);
+            throw new Error("Error al procesar la respuesta de la IA");
+        }
+
+        overlayProcessing.classList.add('hidden');
+
+        const detectedPage = aiData.page || state.pendingUpload.page;
+        const confirmedPage = await confirmPageNumber(detectedPage);
+
+        if (!confirmedPage) {
+            return;
+        }
+
+        state.pendingUpload.page = parseInt(confirmedPage);
         processingText.textContent = "Guardando...";
+        overlayProcessing.classList.remove('hidden');
+
         const pageData = {
             subject: state.pendingUpload.subject,
             page: parseInt(state.pendingUpload.page),
             imageUrl: imageUrl,
-            solution: aiResult,
+            solution: aiData.exercises || aiData,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        // Add to Firestore
         await db.collection('pages').add(pageData);
 
-        // Done
         overlayProcessing.classList.add('hidden');
-
-        // Navigate to result
-        // Need to pass the data object directly since we just created it
-        // Add timestamp manual for immediate display
         navigateTo('view-result', pageData);
 
     } catch (error) {
@@ -450,25 +453,12 @@ async function uploadToGreenHost(blob) {
     return `${GREENHOST_API_URL}/file/${data.id}`;
 }
 
-async function callMistralAI(imageUrl) {
+async function extractTextWithPixtral(imageUrl) {
     const prompt = `
-        Analiza esta imagen de deberes escolares.
-        Identifica cada ejercicio visible.
-        Resuelve cada ejercicio con el formato solicitado:
-        
-        FORMATO DE SALIDA (JSON):
-        [
-          { 
-            "exercise": "Número (ej: 3, 2a)", 
-            "question": "Enunciado breve", 
-            "solution": "Respuesta concisa. Ej: '1-b, 2-c' o '(a) back (b) from'." 
-          }
-        ]
-        
-        REGLAS:
-        - Para ejercicios de unir (match): Formato "1-a, 2-b, 3-c".
-        - Para rellenar huecos (cloze): Formato "(1) respuesta (2) respuesta".
-        - Sé muy conciso. No expliques, solo da la solución.
+        Transcribe ABSOLUTAMENTE TODO el texto de esta página de deberes.
+        No resuelvas nada.
+        Tu único objetivo es copiar fielmente cada palabra, número y enunciado que veas.
+        Separa claramente los ejercicios.
     `;
 
     const payload = {
@@ -482,7 +472,53 @@ async function callMistralAI(imageUrl) {
                 ]
             }
         ],
-        temperature: 0.1,
+        temperature: 0.1
+    };
+
+    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${MISTRAL_API_KEY}`
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) throw new Error("Pixtral Error");
+    const data = await response.json();
+    return data.choices[0].message.content;
+}
+
+async function solveWithMistral(transcription) {
+    const prompt = `
+        Eres un profesor experto. Aquí tienes la transcripción de una hoja de deberes:
+        ---
+        ${transcription}
+        ---
+        
+        Tu tarea es:
+        1. Identificar el NÚMERO DE PÁGINA si aparece en el texto.
+        2. Identificar TODOS los ejercicios.
+        3. RESOLVERLOS todos correctamentes.
+        
+        IMPORTANTE: Devuelve la respuesta SOLAMENTE en formato JSON.
+        Formato:
+        {
+          "page": "Número de página detectado (o null si no lo ves)",
+          "exercises": [
+            { 
+              "exercise": "Número (ej: 3)", 
+              "question": "Enunciado breve", 
+              "solution": "Respuesta concisa." 
+            }
+          ]
+        }
+    `;
+
+    const payload = {
+        model: "mistral-large-latest",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
         response_format: { type: "json_object" }
     };
 
@@ -495,14 +531,74 @@ async function callMistralAI(imageUrl) {
         body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error("Mistral API Error: " + (errorData.message || response.statusText));
-    }
-
+    if (!response.ok) throw new Error("Mistral Logic Error");
     const data = await response.json();
     return data.choices[0].message.content;
 }
 
-// Start
+// Confirm Page Modal Logic
+function confirmPageNumber(detectedPage) {
+    return new Promise((resolve) => {
+        const modalConfirm = document.getElementById('modal-confirm-page');
+        const modalEdit = document.getElementById('modal-edit-page');
+
+        // Elementos dentro de los modales (añadidos en modal.html antes)
+        const display = document.getElementById('confirm-page-display');
+        const btnYesOriginal = document.getElementById('btn-page-yes');
+        const btnNoOriginal = document.getElementById('btn-page-no');
+
+        // Modal Edit elements
+        const btnSaveOriginal = document.getElementById('btn-save-page');
+        const inputCorrect = document.getElementById('input-correct-page');
+
+        // Logic
+        let currentGuess = (detectedPage && detectedPage !== '?' && detectedPage !== null) ? detectedPage : state.pendingUpload.page;
+        if (currentGuess === '?' || !currentGuess) currentGuess = '--';
+
+        display.textContent = currentGuess;
+        inputCorrect.value = '';
+
+        showModal(modalConfirm);
+
+        // Replace buttons to clear previous listeners
+        const btnYes = btnYesOriginal.cloneNode(true);
+        const btnNo = btnNoOriginal.cloneNode(true);
+        const btnSave = btnSaveOriginal.cloneNode(true);
+
+        btnYesOriginal.parentNode.replaceChild(btnYes, btnYesOriginal);
+        btnNoOriginal.parentNode.replaceChild(btnNo, btnNoOriginal);
+        btnSaveOriginal.parentNode.replaceChild(btnSave, btnSaveOriginal);
+
+        btnYes.onclick = () => {
+            hideModal(modalConfirm);
+            if (currentGuess === '--') {
+                setTimeout(() => {
+                    inputCorrect.value = '';
+                    showModal(modalEdit);
+                }, 300);
+            } else {
+                resolve(currentGuess);
+            }
+        };
+
+        btnNo.onclick = () => {
+            hideModal(modalConfirm);
+            setTimeout(() => {
+                inputCorrect.value = (currentGuess !== '--') ? currentGuess : '';
+                showModal(modalEdit);
+            }, 300);
+        };
+
+        btnSave.onclick = () => {
+            const val = inputCorrect.value;
+            if (val) {
+                hideModal(modalEdit);
+                resolve(val);
+            } else {
+                alert("Introduce un número");
+            }
+        };
+    });
+}
+
 document.addEventListener('DOMContentLoaded', init);
