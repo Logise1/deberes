@@ -208,6 +208,7 @@ function renderResult(pageData) {
     } catch (e) {
         console.error("JSON Parse Error", e);
         resultContent.innerHTML = `<div class="exercise-card"><p>Error al procesar la respuesta de la IA.</p></div>`;
+        return;
     }
 
     let html = `
@@ -220,36 +221,82 @@ function renderResult(pageData) {
     if (solution.exercises) solution = solution.exercises;
 
     if (Array.isArray(solution)) {
-        const renderValue = (val) => {
-            if (val === null || val === undefined) return '';
-            if (Array.isArray(val)) {
-                return `<ul style="padding-left:1.2rem; margin:0.5rem 0;">
-                    ${val.map(v => `<li>${renderValue(v)}</li>`).join('')}
-                </ul>`;
-            }
-            if (typeof val === 'object') {
-                return `<div style="margin-left: 0.5rem;">
-                    ${Object.entries(val).map(([k, v]) => `<div><strong>${k}:</strong> ${renderValue(v)}</div>`).join('')}
-                </div>`;
-            }
-            return val;
-        };
+        // Group exercises by main number (1, 2, 3, etc.)
+        const grouped = {};
 
-        solution.forEach((item, index) => {
+        solution.forEach((item) => {
+            const exNum = item.exercise || '';
+            // Extract main exercise number (e.g., "1" from "1.1" or "1")
+            const mainNum = exNum.toString().split('.')[0] || exNum;
+
+            if (!grouped[mainNum]) {
+                grouped[mainNum] = {
+                    mainNumber: mainNum,
+                    mainQuestion: '',
+                    parts: []
+                };
+            }
+
+            // Detect if this is a main exercise title or a sub-part
+            const hasParts = exNum.toString().includes('.');
+
+            if (!hasParts && item.question && !item.solution) {
+                // This is likely the main exercise header
+                grouped[mainNum].mainQuestion = item.question;
+            } else {
+                // This is a solution part
+                grouped[mainNum].parts.push({
+                    number: exNum,
+                    question: item.question || '',
+                    solution: item.solution || item.answer || ''
+                });
+            }
+        });
+
+        // Render grouped exercises
+        Object.values(grouped).forEach(exercise => {
             html += `
-                <div class="exercise-card">
-                    <div class="exercise-header" style="margin-bottom:0.5rem;">
-                        <span style="font-weight:700; color:var(--primary-color); margin-right: 0.5rem;">${item.exercise || (index + 1)}.</span>
-                        <span style="font-weight:600;">${item.question || ''}</span>
+                <div class="exercise-card" style="border-left: 4px solid var(--primary-color); padding: 1.25rem;">
+                    <div class="exercise-main-header" style="margin-bottom: 1rem;">
+                        <span style="font-weight: 800; color: var(--primary-color); font-size: 1.3em; margin-right: 0.5rem;">${exercise.mainNumber}.</span>
+                        <span style="font-weight: 600; color: var(--text-main); font-size: 1.1em;">${exercise.mainQuestion}</span>
                     </div>
-                    <div class="exercise-body" style="color:var(--text-muted);">
-                        ${renderValue(item.solution || item.answer)}
+                    <div class="exercise-parts" style="display: flex; flex-direction: column; gap: 0.75rem; padding-left: 1rem;">
+            `;
+
+            exercise.parts.forEach(part => {
+                const renderValue = (val) => {
+                    if (val === null || val === undefined) return '';
+                    if (Array.isArray(val)) {
+                        return `<ul style="padding-left:1.2rem; margin:0.5rem 0; list-style-type: disc;">
+                            ${val.map(v => `<li>${renderValue(v)}</li>`).join('')}
+                        </ul>`;
+                    }
+                    if (typeof val === 'object') {
+                        return `<div style="margin-left: 0.5rem;">
+                            ${Object.entries(val).map(([k, v]) => `<div><strong style="color:var(--secondary-color);">${k}:</strong> ${renderValue(v)}</div>`).join('')}
+                        </div>`;
+                    }
+                    return val;
+                };
+
+                html += `
+                    <div class="exercise-part" style="background: rgba(37, 99, 235, 0.05); padding: 0.75rem; border-radius: 8px;">
+                        ${part.question ? `<div style="font-weight: 500; color: var(--text-main); margin-bottom: 0.25rem;">${part.number}. ${part.question}</div>` : ''}
+                        <div style="color: var(--text-muted); font-family: 'Inter', sans-serif; margin-left: ${part.question ? '1rem' : '0'};">
+                            ${renderValue(part.solution)}
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
                     </div>
                 </div>
             `;
         });
     } else {
-        html += `<pre>${JSON.stringify(solution, null, 2)}</pre>`;
+        html += `<pre style="white-space: pre-wrap;">${JSON.stringify(solution, null, 2)}</pre>`;
     }
     resultContent.innerHTML = html;
 }
@@ -317,52 +364,47 @@ async function handleCapture() {
 // --- Processing with 20s Timer ---
 
 async function processImage(imageBlob) {
-    const startTime = Date.now();
-    const DURATION = 20000; // 20 seconds target
-    let progressInterval;
+    const DURATION = 20000; // 20 seconds minimum
+    let currentProgress = 0;
 
     try {
-        // Start Progress Bar Animation
-        let progress = 0;
-        const step = 100 / (DURATION / 100); // Update every 100ms
-        progressInterval = setInterval(() => {
-            progress = Math.min(progress + step, 98); // Cap at 98 until done
-            progressBar.style.width = `${progress}%`;
-        }, 100);
-
-        // --- Actual Work (Parallel) ---
-        // We run the API calls. We do NOT await them immediately to block the timer check.
-        // But actually, simpler: Promise.all([apiCalls, timer])
-
-        const apiWork = async () => {
-            // 1. Upload
-            const imageUrl = await uploadToGreenHost(imageBlob);
-
-            // 2. Pixtral Text
-            const transcription = await extractTextWithPixtral(imageUrl);
-
-            // 3. Mistral Solve (No page detection)
-            const aiJson = await solveWithMistral(transcription);
-
-            let aiData;
-            try { aiData = JSON.parse(aiJson); } catch (e) { aiData = { exercises: [] }; }
-
-            return { imageUrl, aiData };
+        // Smooth progress animation
+        const updateProgress = (target, message) => {
+            processingText.textContent = message;
+            const increment = (target - currentProgress) / 20;
+            const interval = setInterval(() => {
+                currentProgress += increment;
+                if (currentProgress >= target) {
+                    currentProgress = target;
+                    clearInterval(interval);
+                }
+                progressBar.style.width = `${Math.min(currentProgress, 100)}%`;
+            }, 50);
         };
 
-        const timerWork = new Promise(resolve => setTimeout(resolve, DURATION));
+        // Step 1: Upload
+        updateProgress(25, "📤 Subiendo imagen...");
+        const imageUrl = await uploadToGreenHost(imageBlob);
+        await new Promise(r => setTimeout(r, 1000));
 
-        // Race minimum duration: wait for BOTH works to finish
-        // If API is fast, timerWork holds it back.
-        // If API is slow, we wait for API.
-        const [result] = await Promise.all([apiWork(), timerWork]);
+        // Step 2: Text extraction
+        updateProgress(50, "👁️ Leyendo texto con IA...");
+        const transcription = await extractTextWithPixtral(imageUrl);
+        await new Promise(r => setTimeout(r, 1000));
 
-        // Done
-        clearInterval(progressInterval);
-        progressBar.style.width = '100%';
+        // Step 3: Solving
+        updateProgress(85, "🧠 Resolviendo ejercicios...");
+        const aiJson = await solveWithMistral(transcription);
 
-        // Save
-        const { imageUrl, aiData } = result;
+        let aiData;
+        try {
+            aiData = JSON.parse(aiJson);
+        } catch (e) {
+            aiData = { exercises: [] };
+        }
+
+        // Step 4: Saving
+        updateProgress(95, "💾 Guardando en Firebase...");
         const pageData = {
             subject: state.pendingUpload.subject,
             page: parseInt(state.pendingUpload.page),
@@ -373,17 +415,29 @@ async function processImage(imageBlob) {
 
         await db.collection('pages').add(pageData);
 
-        // Small delay to see 100%
+        // Wait for minimum duration
+        const elapsed = Date.now() - Date.now();
+        if (elapsed < DURATION) {
+            await new Promise(r => setTimeout(r, DURATION - elapsed));
+        }
+
+        // Complete
+        updateProgress(100, "✅ Completado!");
+        progressBar.style.width = '100%';
+
         setTimeout(() => {
             overlayProcessing.classList.add('hidden');
             navigateTo('view-result', pageData);
         }, 500);
 
     } catch (error) {
-        clearInterval(progressInterval);
         console.error(error);
-        alert("Error: " + error.message);
-        overlayProcessing.classList.add('hidden');
+        processingText.textContent = "❌ Error: " + error.message;
+        progressBar.style.width = '0%';
+        setTimeout(() => {
+            overlayProcessing.classList.add('hidden');
+            alert("Error: " + error.message);
+        }, 2000);
     }
 }
 
