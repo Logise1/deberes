@@ -251,15 +251,40 @@ function renderResult(pageData) {
     `;
 
     if (Array.isArray(solution)) {
+        // Recursive function to render complex objects/arrays
+        const renderValue = (val) => {
+            if (val === null || val === undefined) return '';
+
+            if (Array.isArray(val)) {
+                return `<ul style="padding-left:1.2rem; margin:0.5rem 0; list-style-type: none;">
+                    ${val.map(v => `<li>• ${renderValue(v)}</li>`).join('')}
+                </ul>`;
+            }
+
+            if (typeof val === 'object') {
+                // Flatten object to key: value
+                return `<div style="margin-left: 0.5rem; display: flex; flex-direction: column; gap: 4px;">
+                    ${Object.entries(val).map(([k, v]) => `
+                        <div><strong style="color:var(--secondary-color);">${k}:</strong> ${renderValue(v)}</div>
+                    `).join('')}
+                </div>`;
+            }
+            return val;
+        };
+
         solution.forEach((item, index) => {
+            const answer = item.solution || item.answer;
+            const displayAnswer = renderValue(answer);
+
             html += `
                 <div class="exercise-card">
                     <div class="exercise-title">
-                        <span>Ejercicio ${item.exercise || (index + 1)}</span>
+                        <span>${item.exercise || `Ejercicio ${index + 1}`}</span>
                     </div>
                     <div class="exercise-content">
                         <strong>Pregunta:</strong> ${item.question || 'N/A'}<br><br>
-                        <strong>Respuesta:</strong> ${item.solution || item.answer || 'Ver imagen'}
+                        <strong>Respuesta:</strong> 
+                        <div style="margin-top:0.5rem;">${displayAnswer || 'Ver imagen'}</div>
                     </div>
                 </div>
             `;
@@ -299,7 +324,9 @@ function startCameraFlow(subject, page) {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({
             video: {
-                facingMode: { exact: "environment" } // Try rear camera forced
+                facingMode: { exact: "environment" },
+                width: { ideal: 4096 }, // Request 4K or highest
+                height: { ideal: 2160 }
             }
         })
             .then(stream => {
@@ -309,7 +336,12 @@ function startCameraFlow(subject, page) {
             .catch(err => {
                 console.warn("Rear camera failed, trying default", err);
                 // Fallback
-                navigator.mediaDevices.getUserMedia({ video: true })
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 4096 },
+                        height: { ideal: 2160 }
+                    }
+                })
                     .then(stream => {
                         state.cameraStream = stream;
                         videoEl.srcObject = stream;
