@@ -1,0 +1,11 @@
+// INSTRUCCIONES DE CONFIGURACIÓN:
+// 1. Despliega worker.js en Cloudflare Workers
+// 2. Copia la URL del worker y pégala en la constante WORKER_URL abajo
+// 3. La app automáticamente usará el worker si está disponible
+
+const WORKER_URL = ""; // ← PEGA AQUÍ TU URL DEL WORKER (ej: "https://tu-worker.workers.dev")
+
+// Funcionalidad del worker:
+// - Si WORKER_URL está vacío o el worker no responde en 2s → procesa localmente
+// - Si el worker responde OK → envía la foto al worker y continúa sin esperar
+// - El worker procesa todo en background (upload, IA, Firebase)

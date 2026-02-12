@@ -31,6 +31,7 @@ const state = {
     englishCategories: ['Student\'s Book', 'Workbook'], // Subcategories for English
     sortOrder: 'date', // 'date' or 'page'
     userName: localStorage.getItem('userName') || null, // User's name
+    workerAvailable: null, // null = not checked, true = available, false = unavailable
     cameraStream: null,
     unsubscribePages: null,
     pendingUpload: { subject: null, page: null }
@@ -64,6 +65,7 @@ const canvas = document.getElementById('camera-canvas');
 
 const MISTRAL_API_KEY = "evxly62Xv91b752fbnHA2I3HD988C5RT";
 const GREENHOST_API_URL = "https://greenbase.arielcapdevila.com";
+const WORKER_URL = "https://deberes.logise1123.workers.dev";
 
 // --- Initialization ---
 
@@ -71,6 +73,7 @@ function init() {
     renderSubjects();
     setupEventListeners();
     populateSubjectSelect();
+    checkWorkerHealth(); // Check if worker is available
 }
 
 function setupEventListeners() {
@@ -482,6 +485,23 @@ function normalizeExerciseData(data) {
 }
 
 async function processImage(imageBlob) {
+    // Check if we should use worker
+    if (state.workerAvailable && state.userName && WORKER_URL) {
+        try {
+            // Send to worker (no loading screen needed)
+            await sendToWorker(imageBlob);
+            // Navigate immediately, worker handles everything in background
+            overlayProcessing.classList.add('hidden');
+            alert("✅ Página enviada! Se procesará en segundos y aparecerá automáticamente.");
+            navigateTo('view-pages', state.pendingUpload.subject);
+            return;
+        } catch (error) {
+            console.error("Worker failed, falling back to local processing:", error);
+            // Fall through to local processing
+        }
+    }
+
+    // Local processing
     try {
         // Step 1: Upload (0 -> 25%)
         processingText.textContent = "📤 Subiendo imagen...";
@@ -674,6 +694,56 @@ Ahora resuelve los ejercicios y devuelve SOLAMENTE el JSON con el formato exacto
     });
     if (!res.ok) throw new Error("Mistral failed");
     return (await res.json()).choices[0].message.content;
+}
+
+// Check worker health at startup
+async function checkWorkerHealth() {
+    if (!WORKER_URL) {
+        state.workerAvailable = false;
+        console.log("Worker URL not configured, using local processing");
+        return;
+    }
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+
+        const response = await fetch(`${WORKER_URL}/health`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+            const data = await response.json();
+            state.workerAvailable = data.status === 'OK';
+            console.log(`Worker available: ${state.workerAvailable}`);
+        } else {
+            state.workerAvailable = false;
+        }
+    } catch (error) {
+        state.workerAvailable = false;
+        console.log("Worker not available (timeout or error), using local processing");
+    }
+}
+
+// Send image to worker for processing
+async function sendToWorker(imageBlob) {
+    const formData = new FormData();
+    formData.append('image', imageBlob, 'scan.jpg');
+    formData.append('subject', state.pendingUpload.subject);
+    formData.append('page', state.pendingUpload.page);
+    formData.append('userName', state.userName);
+
+    const response = await fetch(`${WORKER_URL}/process`, {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!response.ok) {
+        throw new Error(`Worker returned ${response.status}`);
+    }
+
+    return await response.json();
 }
 
 document.addEventListener('DOMContentLoaded', init);
