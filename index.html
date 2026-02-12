@@ -121,6 +121,27 @@
             </div>
         </div>
 
+        <!-- Modal: Contribution Request -->
+        <div id="modal-contribution" class="modal">
+            <div class="modal-content bottom-sheet">
+                <h2>🎯 ¡Ayuda a la comunidad!</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                    Antes de ver esta página, ¿podrías contribuir añadiendo la página <strong id="contribution-page-number" style="color: var(--primary-color);">0</strong> de <strong id="contribution-subject" style="color: var(--primary-color);">esta asignatura</strong>?
+                </p>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                    Esta página aún no está en el sistema y ayudaría a otros estudiantes.
+                </p>
+                <div class="modal-actions" style="flex-direction: column; gap: 0.75rem;">
+                    <button id="btn-contribute-yes" class="btn btn-primary" style="width: 100%;">
+                        📸 Sí, voy a contribuir
+                    </button>
+                    <button id="btn-contribute-no" class="btn btn-secondary" style="width: 100%;">
+                        ⏭️ No ahora (esperar 10s)
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Fullscreen Overlay: Camera -->
         <div id="overlay-camera" class="fullscreen-overlay hidden">
             <video id="camera-feed" autoplay playsinline></video>

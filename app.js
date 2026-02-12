@@ -34,7 +34,10 @@ const state = {
     workerAvailable: null, // null = not checked, true = available, false = unavailable
     cameraStream: null,
     unsubscribePages: null,
-    pendingUpload: { subject: null, page: null }
+    pendingUpload: { subject: null, page: null },
+    pendingPageView: null, // Page data waiting to be shown after contribution
+    contributionPage: null, // The page number to contribute
+    allPages: [] // Cache of all pages for finding missing ones
 };
 
 // DOM Elements
@@ -62,6 +65,11 @@ const overlayProcessing = document.getElementById('overlay-processing');
 const processingText = document.getElementById('processing-text');
 const progressBar = document.getElementById('progress-bar'); // NEW
 const canvas = document.getElementById('camera-canvas');
+const modalContribution = document.getElementById('modal-contribution');
+const contributionPageNumber = document.getElementById('contribution-page-number');
+const contributionSubject = document.getElementById('contribution-subject');
+const btnContributeYes = document.getElementById('btn-contribute-yes');
+const btnContributeNo = document.getElementById('btn-contribute-no');
 
 const MISTRAL_API_KEY = "evxly62Xv91b752fbnHA2I3HD988C5RT";
 const GREENHOST_API_URL = "https://greenbase.arielcapdevila.com";
@@ -112,6 +120,10 @@ function setupEventListeners() {
 
     btnCloseCamera.addEventListener('click', stopCamera);
     btnCapture.addEventListener('click', handleCapture);
+
+    // Contribution modal buttons
+    btnContributeYes.addEventListener('click', handleContributeYes);
+    btnContributeNo.addEventListener('click', handleContributeNo);
 
     // Sort selector
     const sortSelector = document.getElementById('sort-selector');
@@ -261,7 +273,7 @@ function loadPages(subject) {
                 </div>
                 <span class="page-status">Ver solución ›</span>
             `;
-            item.onclick = () => navigateTo('view-result', data);
+            item.onclick = () => handlePageClick(data);
             pageListEl.appendChild(item);
         });
 
@@ -285,6 +297,125 @@ function loadPages(subject) {
         console.error("Error watching pages: ", error);
         pageListEl.innerHTML = `<p style="color:var(--error)">Error al cargar páginas.</p>`;
     });
+}
+
+// Handle page click - may trigger contribution request
+async function handlePageClick(pageData) {
+    // Store all pages for this subject
+    const snapshot = await db.collection('pages')
+        .where('subject', '==', pageData.subject)
+        .get();
+    
+    state.allPages = snapshot.docs.map(doc => parseInt(doc.data().page));
+    
+    // Find a random missing page nearby
+    const missingPage = findRandomMissingPage(pageData.subject, state.allPages);
+    
+    if (missingPage !== null) {
+        // Show contribution request
+        state.pendingPageView = pageData;
+        state.contributionPage = missingPage;
+        contributionPageNumber.textContent = missingPage;
+        contributionSubject.textContent = pageData.subject;
+        showModal(modalContribution);
+    } else {
+        // No missing pages, show directly
+        navigateTo('view-result', pageData);
+    }
+}
+
+// Find a random missing page (preferably +1 or -1 from existing pages)
+function findRandomMissingPage(subject, existingPages) {
+    if (existingPages.length === 0) return 1; // If no pages, suggest page 1
+    
+    const candidates = new Set();
+    
+    // Look for gaps around existing pages
+    existingPages.forEach(page => {
+        if (!existingPages.includes(page - 1)) {
+            candidates.add(page - 1);
+        }
+        if (!existingPages.includes(page + 1)) {
+            candidates.add(page + 1);
+        }
+    });
+    
+    // Remove pages <= 0
+    const validCandidates = Array.from(candidates).filter(p => p > 0);
+    
+    if (validCandidates.length === 0) {
+        return null; // No missing pages nearby
+    }
+    
+    // Return a random candidate
+    return validCandidates[Math.floor(Math.random() * validCandidates.length)];
+}
+
+// Handle "Yes" button on contribution modal
+function handleContributeYes() {
+    hideModal(modalContribution);
+    
+    // Set up for contribution
+    selectSubject.value = state.pendingPageView.subject;
+    inputPage.value = state.contributionPage;
+    
+    // Start camera flow for contribution
+    startCameraFlowForContribution(state.pendingPageView.subject, state.contributionPage);
+}
+
+// Handle "No" button on contribution modal
+function handleContributeNo() {
+    hideModal(modalContribution);
+    
+    // Show a countdown overlay
+    showCountdownAndProceed();
+}
+
+// Show countdown before showing the page
+function showCountdownAndProceed() {
+    overlayProcessing.classList.remove('hidden');
+    progressBar.style.width = '0%';
+    
+    let secondsLeft = 10;
+    processingText.textContent = `⏱️ Esperando ${secondsLeft} segundos...`;
+    
+    const interval = setInterval(() => {
+        secondsLeft--;
+        processingText.textContent = `⏱️ Esperando ${secondsLeft} segundos...`;
+        progressBar.style.width = `${(10 - secondsLeft) * 10}%`;
+        
+        if (secondsLeft <= 0) {
+            clearInterval(interval);
+            overlayProcessing.classList.add('hidden');
+            navigateTo('view-result', state.pendingPageView);
+            state.pendingPageView = null;
+        }
+    }, 1000);
+}
+
+// Start camera flow specifically for contribution
+function startCameraFlowForContribution(subject, page) {
+    state.pendingUpload = { subject, page, isContribution: true };
+    overlayCamera.classList.remove('hidden');
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: "environment" }, width: { ideal: 4096 }, height: { ideal: 2160 } }
+        })
+            .then(stream => {
+                state.cameraStream = stream;
+                videoEl.srcObject = stream;
+            })
+            .catch(err => {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        state.cameraStream = stream;
+                        videoEl.srcObject = stream;
+                    });
+            });
+    } else {
+        alert("Sin acceso a cámara");
+    }
 }
 
 function renderResult(pageData) {
@@ -447,13 +578,16 @@ async function handleCapture() {
     canvas.getContext('2d').drawImage(videoEl, 0, 0);
     stopCamera();
 
+    // Check if this is a contribution
+    const isContribution = state.pendingUpload.isContribution;
+
     // Show Progress Overlay
     overlayProcessing.classList.remove('hidden');
-    processingText.textContent = "Analizando (20s)...";
+    processingText.textContent = isContribution ? "📤 Subiendo contribución..." : "Analizando (20s)...";
     progressBar.style.width = '0%';
 
     canvas.toBlob(blob => {
-        if (blob) processImage(blob);
+        if (blob) processImage(blob, isContribution);
     }, 'image/jpeg', 0.85);
 }
 
@@ -484,7 +618,7 @@ function normalizeExerciseData(data) {
     return data;
 }
 
-async function processImage(imageBlob) {
+async function processImage(imageBlob, isContribution = false) {
     // Check if we should use worker
     if (state.workerAvailable && state.userName && WORKER_URL) {
         try {
@@ -492,8 +626,20 @@ async function processImage(imageBlob) {
             await sendToWorker(imageBlob);
             // Navigate immediately, worker handles everything in background
             overlayProcessing.classList.add('hidden');
-            alert("✅ Página enviada! Se procesará en segundos y aparecerá automáticamente.");
-            navigateTo('view-pages', state.pendingUpload.subject);
+            
+            if (isContribution) {
+                // After contribution, show the original page they wanted
+                if (state.pendingPageView) {
+                    navigateTo('view-result', state.pendingPageView);
+                    state.pendingPageView = null;
+                } else {
+                    alert("✅ ¡Gracias por contribuir! La página se procesará en segundos.");
+                    navigateTo('view-pages', state.pendingUpload.subject);
+                }
+            } else {
+                alert("✅ Página enviada! Se procesará en segundos y aparecerá automáticamente.");
+                navigateTo('view-pages', state.pendingUpload.subject);
+            }
             return;
         } catch (error) {
             console.error("Worker failed, falling back to local processing:", error);
@@ -561,7 +707,14 @@ async function processImage(imageBlob) {
 
         setTimeout(() => {
             overlayProcessing.classList.add('hidden');
-            navigateTo('view-result', pageData);
+            
+            if (isContribution && state.pendingPageView) {
+                // After contribution, show the original page they wanted
+                navigateTo('view-result', state.pendingPageView);
+                state.pendingPageView = null;
+            } else {
+                navigateTo('view-result', pageData);
+            }
         }, 300);
 
     } catch (error) {
