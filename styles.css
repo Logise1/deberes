@@ -463,3 +463,33 @@ header h1 {
     transition: width 0.3s ease-out;
     box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
 }
+
+/* Collapsible Exercise Cards */
+.collapse-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: color 0.2s;
+}
+
+.collapse-btn:hover {
+    color: var(--primary-color);
+}
+
+.chevron-icon {
+    transition: transform 0.3s ease;
+}
+
+.exercise-card.collapsed .chevron-icon {
+    transform: rotate(-90deg);
+}
+
+.exercise-parts {
+    overflow: hidden;
+    transition: all 0.3s ease;
+}

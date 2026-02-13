@@ -31,7 +31,7 @@ const state = {
     englishCategories: ['Student\'s Book', 'Workbook'], // Subcategories for English
     sortOrder: 'date', // 'date' or 'page'
     userName: localStorage.getItem('userName') || null, // User's name
-    workerAvailable: null, // null = not checked, true = available, false = unavailable
+
     cameraStream: null,
     unsubscribePages: null,
     pendingUpload: { subject: null, page: null },
@@ -83,7 +83,7 @@ function init() {
     renderSubjects();
     setupEventListeners();
     populateSubjectSelect();
-    checkWorkerHealth(); // Check if worker is available
+    handleURLParams(); // Check URL parameters and navigate
 }
 
 function setupEventListeners() {
@@ -151,18 +151,21 @@ function navigateTo(viewId, param = null) {
         backBtn.classList.add('hidden');
         fabAdd.classList.remove('hidden');
         state.selectedSubject = null;
+        updateURL(viewId); // Update URL to root
     } else if (viewId === 'view-pages') {
         state.selectedSubject = param;
         headerTitle.textContent = param;
         backBtn.classList.remove('hidden');
         fabAdd.classList.remove('hidden');
         loadPages(param);
+        updateURL(viewId, param); // Update URL with class parameter
     } else if (viewId === 'view-result') {
         state.selectedPage = param;
         headerTitle.textContent = `Pág ${param.page}`;
         backBtn.classList.remove('hidden');
         fabAdd.classList.add('hidden');
         renderResult(param);
+        updateURL(viewId, param.subject, param.page); // Update URL with class and page
     }
 }
 
@@ -487,14 +490,22 @@ function renderResult(pageData) {
         });
 
         // Render grouped exercises
-        Object.values(grouped).forEach(exercise => {
+        Object.values(grouped).forEach((exercise, index) => {
+            const exerciseId = `exercise-${index}`;
             html += `
-                <div class="exercise-card" style="border-left: 4px solid var(--primary-color); padding: 1.25rem;">
-                    <div class="exercise-main-header" style="margin-bottom: 1rem;">
-                        <span style="font-weight: 800; color: var(--primary-color); font-size: 1.3em; margin-right: 0.5rem;">${exercise.mainNumber}.</span>
-                        <span style="font-weight: 600; color: var(--text-main); font-size: 1.1em;">${exercise.mainQuestion}</span>
+                <div class="exercise-card collapsible" data-exercise-id="${exerciseId}" style="border-left: 4px solid var(--primary-color); padding: 1.25rem;">
+                    <div class="exercise-main-header" style="margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="toggleExercise('${exerciseId}')">
+                        <div>
+                            <span style="font-weight: 800; color: var(--primary-color); font-size: 1.3em; margin-right: 0.5rem;">${exercise.mainNumber}.</span>
+                            <span style="font-weight: 600; color: var(--text-main); font-size: 1.1em;">${exercise.mainQuestion}</span>
+                        </div>
+                        <button class="collapse-btn" aria-label="Colapsar ejercicio">
+                            <svg class="chevron-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </button>
                     </div>
-                    <div class="exercise-parts" style="display: flex; flex-direction: column; gap: 0.75rem; padding-left: 1rem;">
+                    <div class="exercise-parts" id="${exerciseId}" style="display: flex; flex-direction: column; gap: 0.75rem; padding-left: 1rem;">
             `;
 
             exercise.parts.forEach(part => {
@@ -631,35 +642,7 @@ function normalizeExerciseData(data) {
 }
 
 async function processImage(imageBlob, isContribution = false) {
-    // Check if we should use worker
-    if (state.workerAvailable && state.userName && WORKER_URL) {
-        try {
-            // Send to worker (no loading screen needed)
-            await sendToWorker(imageBlob);
-            // Navigate immediately, worker handles everything in background
-            overlayProcessing.classList.add('hidden');
-
-            if (isContribution) {
-                // After contribution, show the original page they wanted
-                if (state.pendingPageView) {
-                    navigateTo('view-result', state.pendingPageView);
-                    state.pendingPageView = null;
-                } else {
-                    alert("✅ ¡Gracias por contribuir! La página se procesará en segundos.");
-                    navigateTo('view-pages', state.pendingUpload.subject);
-                }
-            } else {
-                alert("✅ Página enviada! Se procesará en segundos y aparecerá automáticamente.");
-                navigateTo('view-pages', state.pendingUpload.subject);
-            }
-            return;
-        } catch (error) {
-            console.error("Worker failed, falling back to local processing:", error);
-            // Fall through to local processing
-        }
-    }
-
-    // Local processing
+    // Always use local processing
     try {
         // Step 1: Upload (0 -> 25%)
         processingText.textContent = "📤 Subiendo imagen...";
@@ -861,54 +844,72 @@ Ahora resuelve los ejercicios y devuelve SOLAMENTE el JSON con el formato exacto
     return (await res.json()).choices[0].message.content;
 }
 
-// Check worker health at startup
-async function checkWorkerHealth() {
-    if (!WORKER_URL) {
-        state.workerAvailable = false;
-        console.log("Worker URL not configured, using local processing");
-        return;
-    }
+// --- URL Parameters Navigation ---
 
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
-
-        const response = await fetch(`${WORKER_URL}/health`, {
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-            const data = await response.json();
-            state.workerAvailable = data.status === 'OK';
-            console.log(`Worker available: ${state.workerAvailable}`);
-        } else {
-            state.workerAvailable = false;
-        }
-    } catch (error) {
-        state.workerAvailable = false;
-        console.log("Worker not available (timeout or error), using local processing");
-    }
+function parseURLParams() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+        class: params.get('class'),
+        page: params.get('page')
+    };
 }
 
-// Send image to worker for processing
-async function sendToWorker(imageBlob) {
-    const formData = new FormData();
-    formData.append('image', imageBlob, 'scan.jpg');
-    formData.append('subject', state.pendingUpload.subject);
-    formData.append('page', state.pendingUpload.page);
-    formData.append('userName', state.userName);
+function updateURL(view, subject = null, page = null) {
+    const params = new URLSearchParams();
 
-    const response = await fetch(`${WORKER_URL}/process`, {
-        method: 'POST',
-        body: formData
-    });
-
-    if (!response.ok) {
-        throw new Error(`Worker returned ${response.status}`);
+    if (view === 'view-pages' && subject) {
+        params.set('class', subject);
+    } else if (view === 'view-result' && subject && page) {
+        params.set('class', subject);
+        params.set('page', page);
     }
 
-    return await response.json();
+    const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    window.history.pushState({}, '', newURL);
+}
+
+async function handleURLParams() {
+    const params = parseURLParams();
+
+    if (params.class && params.page) {
+        // Navigate to specific page
+        const pageNumber = parseInt(params.page);
+        const snapshot = await db.collection('pages')
+            .where('subject', '==', params.class)
+            .where('page', '==', pageNumber)
+            .limit(1)
+            .get();
+
+        if (!snapshot.empty) {
+            const pageData = snapshot.docs[0].data();
+            navigateTo('view-result', pageData);
+        } else {
+            // Page not found, just navigate to subject
+            navigateTo('view-pages', params.class);
+        }
+    } else if (params.class) {
+        // Navigate to subject
+        navigateTo('view-pages', params.class);
+    }
+    // Otherwise stay on subjects view
+}
+
+// --- Collapsible Exercise Cards ---
+
+function toggleExercise(exerciseId) {
+    const exerciseParts = document.getElementById(exerciseId);
+    const exerciseCard = document.querySelector(`[data-exercise-id="${exerciseId}"]`);
+    const chevronIcon = exerciseCard.querySelector('.chevron-icon');
+
+    if (exerciseParts.style.display === 'none') {
+        exerciseParts.style.display = 'flex';
+        exerciseCard.classList.remove('collapsed');
+        chevronIcon.style.transform = 'rotate(0deg)';
+    } else {
+        exerciseParts.style.display = 'none';
+        exerciseCard.classList.add('collapsed');
+        chevronIcon.style.transform = 'rotate(-90deg)';
+    }
 }
 
 document.addEventListener('DOMContentLoaded', init);
