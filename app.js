@@ -23,14 +23,14 @@ const state = {
     currentView: 'view-subjects',
     selectedSubject: null,
     selectedPage: null,
-    subjects: [
-        'Matemáticas', 'Física y Química', 'Lengua', 'Geografía',
-        'TIC', 'ATE', 'EPVA', 'Project', 'Inglés',
-        'Tecnología y Digitalización', 'Otros'
-    ],
+    subjects: [], // Will be populated from config
     englishCategories: ['Student\'s Book', 'Workbook'], // Subcategories for English
     sortOrder: 'date', // 'date' or 'page'
     userName: localStorage.getItem('userName') || null, // User's name
+
+    clickCounts: JSON.parse(localStorage.getItem('clickCounts')) || {},
+    lastSeen: JSON.parse(localStorage.getItem('lastSeen')) || {},
+    unreadStatus: {}, // { subject: boolean }
 
     cameraStream: null,
     unsubscribePages: null,
@@ -77,13 +77,73 @@ const MISTRAL_API_KEY = "evxly62Xv91b752fbnHA2I3HD988C5RT";
 const GREENHOST_API_URL = "https://greenbase.arielcapdevila.com";
 const WORKER_URL = "https://deberes.logise1123.workers.dev";
 
+const SUBJECT_CONFIG = {
+    'Matemáticas': {
+        color: '#3b82f6',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></svg>'
+    },
+    'Física y Química': {
+        color: '#8b5cf6',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'
+    },
+    'Lengua': {
+        color: '#ec4899',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
+    },
+    'Geografía': {
+        color: '#10b981',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'
+    },
+    'TIC': {
+        color: '#06b6d4',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
+    },
+    'ATE': {
+        color: '#f97316',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.8-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.35c.71-1.11 1.2-2.3 2.55-3.04C14.14 15 15 14 15 12s-1-3-2.44-5.4z"/></svg>'
+    },
+    'EPVA': {
+        color: '#f59e0b',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>'
+    },
+    'Project': {
+        color: '#14b8a6',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.1 4-1 4-1"/><path d="M12 15v5s3.03-.55 4-2c1.1-1.62 1-4 1-4"/></svg>'
+    },
+    'Inglés': {
+        color: '#1e3a8a',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>'
+    },
+    'Tecnología y Digitalización': {
+        color: '#64748b',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>'
+    },
+    'Otros': {
+        color: '#9ca3af',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'
+    }
+};
+
 // --- Initialization ---
 
 function init() {
+    // Load subjects
+    const subjects = Object.keys(SUBJECT_CONFIG);
+
+    // Sort by click counts (descending)
+    state.subjects = subjects.sort((a, b) => {
+        const countA = state.clickCounts[a] || 0;
+        const countB = state.clickCounts[b] || 0;
+        return countB - countA;
+    });
+
     renderSubjects();
     setupEventListeners();
     populateSubjectSelect();
     handleURLParams(); // Check URL parameters and navigate
+
+    // Check for new content (Unread Dots)
+    checkUnreadStatus();
 }
 
 function setupEventListeners() {
@@ -172,20 +232,72 @@ function navigateTo(viewId, param = null) {
 function renderSubjects() {
     subjectListEl.innerHTML = '';
     state.subjects.forEach(sub => {
+        const config = SUBJECT_CONFIG[sub] || SUBJECT_CONFIG['Otros'];
         const card = document.createElement('div');
         card.className = 'subject-card';
-        const icon = getSubjectIcon(sub);
-        card.innerHTML = `<span class="subject-icon">${icon}</span><div class="subject-name">${sub}</div>`;
+        if (state.unreadStatus[sub]) {
+            card.classList.add('has-notification');
+        }
+
+        card.innerHTML = `
+            <div class="notification-dot"></div>
+            <div class="subject-icon-container" style="background-color: ${config.color}; box-shadow: 0 4px 10px ${config.color}40;">
+                <div class="subject-icon">${config.icon}</div>
+            </div>
+            <div class="subject-name">${sub}</div>
+        `;
 
         // Handle English subcategories
         if (sub === 'Inglés') {
             card.onclick = () => showEnglishSubcategoryModal();
         } else {
-            card.onclick = () => navigateTo('view-pages', sub);
+            card.onclick = () => handleSubjectSelection(sub);
         }
 
         subjectListEl.appendChild(card);
     });
+}
+
+function handleSubjectSelection(sub) {
+    // Increment click count
+    state.clickCounts[sub] = (state.clickCounts[sub] || 0) + 1;
+    localStorage.setItem('clickCounts', JSON.stringify(state.clickCounts));
+
+    // Mark as seen (clear notification)
+    state.lastSeen[sub] = Date.now();
+    localStorage.setItem('lastSeen', JSON.stringify(state.lastSeen));
+    state.unreadStatus[sub] = false;
+
+    navigateTo('view-pages', sub);
+}
+
+async function checkUnreadStatus() {
+    // Check each subject for new content since last visit
+    // Use Promise.all to check concurrently (limit to top/all subjects depending on load)
+    const checks = state.subjects.map(async (sub) => {
+        try {
+            const snapshot = await db.collection('pages')
+                .where('subject', '==', sub)
+                .orderBy('timestamp', 'desc')
+                .limit(1)
+                .get();
+
+            if (!snapshot.empty) {
+                const latestDoc = snapshot.docs[0].data();
+                const lastVisit = state.lastSeen[sub] || 0;
+
+                // If the latest page is newer than our last visit
+                if (latestDoc.timestamp && latestDoc.timestamp.toMillis() > lastVisit) {
+                    state.unreadStatus[sub] = true;
+                }
+            }
+        } catch (e) {
+            console.error(`Error checking unread for ${sub}:`, e);
+        }
+    });
+
+    await Promise.all(checks);
+    renderSubjects(); // Re-render to show dots
 }
 
 function showEnglishSubcategoryModal() {
@@ -207,26 +319,20 @@ function showEnglishSubcategoryModal() {
 
     newBtnStudents.onclick = () => {
         hideModal(modal);
-        navigateTo('view-pages', 'Inglés - Student\'s Book');
+        handleSubjectSelection('Inglés'); // Updates click count for parent category
+        setTimeout(() => navigateTo('view-pages', 'Inglés - Student\'s Book'), 50); // Small delay to allow click count update
     };
 
     newBtnWorkbook.onclick = () => {
         hideModal(modal);
-        navigateTo('view-pages', 'Inglés - Workbook');
+        handleSubjectSelection('Inglés');
+        setTimeout(() => navigateTo('view-pages', 'Inglés - Workbook'), 50);
     };
 
     newBtnCancel.onclick = () => hideModal(modal);
 }
 
-function getSubjectIcon(subject) {
-    const icons = {
-        'Matemáticas': '📐', 'Física y Química': '🧪', 'Lengua': '📚',
-        'Geografía': '🌍', 'TIC': '💻', 'ATE': '🧩', 'EPVA': '🎨',
-        'Project': '🚀', 'Inglés': '🇬🇧', 'Educación Física': '⚽',
-        'Tecnología y Digitalización': '🤖', 'Otros': '📦'
-    };
-    return icons[subject] || '📝';
-}
+// getSubjectIcon removed - logic integrated into renderSubjects with SUBJECT_CONFIG
 
 function populateSubjectSelect() {
     selectSubject.innerHTML = '';
@@ -379,19 +485,21 @@ function handleContributeNo() {
 // Show countdown before showing the page
 function showCountdownAndProceed() {
     overlayProcessing.classList.remove('hidden');
+    overlayProcessing.style.display = 'flex'; // Force display
     progressBar.style.width = '0%';
 
     let secondsLeft = 10;
-    processingText.textContent = `⏱️ Esperando ${secondsLeft} segundos...`;
+    processingText.innerHTML = `⏳ Esperando ${secondsLeft} segundos...`;
 
     const interval = setInterval(() => {
         secondsLeft--;
-        processingText.textContent = `⏱️ Esperando ${secondsLeft} segundos...`;
+        processingText.innerHTML = `⏳ Esperando ${secondsLeft} segundos...`;
         progressBar.style.width = `${(10 - secondsLeft) * 10}%`;
 
         if (secondsLeft <= 0) {
             clearInterval(interval);
             overlayProcessing.classList.add('hidden');
+            overlayProcessing.style.display = ''; // Reset inline style
             navigateTo('view-result', state.pendingPageView);
             state.pendingPageView = null;
         }
@@ -549,12 +657,22 @@ function renderResult(pageData) {
 
 function showModal(modal) {
     modal.classList.add('visible');
+    const content = modal.querySelector('.modal-content');
+    if (content) {
+        content.classList.remove('animate-in'); // Reset to trigger reflow
+        void content.offsetWidth;
+        content.classList.add('animate-in');
+    }
     requestAnimationFrame(() => modal.style.opacity = '1');
 }
 
 function hideModal(modal) {
     modal.style.opacity = '0';
-    setTimeout(() => modal.classList.remove('visible'), 300);
+    setTimeout(() => {
+        modal.classList.remove('visible');
+        const content = modal.querySelector('.modal-content');
+        if (content) content.classList.remove('animate-in');
+    }, 300);
 }
 
 function startCameraFlow(subject, page) {
