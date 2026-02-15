@@ -307,6 +307,114 @@ header h1 {
     /* Ensure text is centered */
 }
 
+/* Helpers */
+.flex-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#camera-feed {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+}
+
+.camera-ui {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    pointer-events: none;
+    /* Let clicks pass to video if needed */
+}
+
+.camera-header {
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6), transparent);
+    padding: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: auto;
+}
+
+.camera-instruction {
+    color: white;
+    font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    font-size: 1rem;
+}
+
+.close-camera {
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(4px);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.close-camera:active {
+    transform: scale(0.9);
+}
+
+.camera-footer {
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
+    padding: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: auto;
+    padding-bottom: 3rem;
+}
+
+.capture-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    border: 4px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(2px);
+}
+
+.capture-btn:active {
+    transform: scale(0.9);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.capture-inner {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: white;
+    transition: all 0.2s;
+}
+
+.capture-btn:active .capture-inner {
+    transform: scale(0.8);
+}
+
+
 .notification-dot {
     position: absolute;
     top: 10px;
